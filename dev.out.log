@@ -1,0 +1,9 @@
+
+> doodle-alive@0.1.0 dev
+> next dev --turbopack --port 3000
+
+▲ Next.js 16.2.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://198.18.0.1:3000
+✓ Ready in 527ms
+[?25h

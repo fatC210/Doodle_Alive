@@ -181,7 +181,7 @@
     | --- | --- | --- |
     | ElevenLabs API Key | STT + Agent(含内置LLM) + TTS | 调用 `GET /v1/user` 成功即通过 |
     | D-ID API Key | Avatar 创建 + Streaming | 调用 `GET /avatars` 成功即通过 |
-    | Image Gen API Key | 生图 | 发送测试请求，能返回图片即通过 |
+    | 图像生成 API 密钥 | 生图 | 发送测试请求，能返回图片即通过 |
     
     所有 Key 在 localStorage 中 **AES-GCM 加密**存储（密钥由用户设备指纹派生）。
     
@@ -197,7 +197,7 @@
     ### 4.3 生图 API 配置
     
     - **Provider 类型**：下拉选择 `OpenAI DALL-E 3` / `Stability AI` / `Custom`
-    - **Custom 模式**：用户自行填写 Endpoint URL + 请求模板（JSON body template，用 `{{prompt}}` 占位）+ 响应图片 URL 路径（JSONPath）
+    - **Custom 模式**：用户自行填写 OpenAI 兼容请求地址、API 密钥和模型名
     - 验证：发送一个最小请求，返回有效图片 URL 即通过
     
     ### 4.4 界面语言
@@ -231,7 +231,7 @@
     │                                                          │
     │  ┌────────────────────────────────────────────────────┐  │
     │  │  Image Gen Adapter Layer                           │  │
-    │  │  (OpenAI DALL-E 3 | Stability AI | Custom)        │  │
+    │  │  (OpenAI-compatible | Stability AI | Custom)      │  │
     │  └────────────────────────────────────────────────────┘  │
     │                                                          │
     │  localStorage: API Keys + Settings (AES-GCM encrypted)   │
@@ -285,7 +285,8 @@
     ├── 文字输入 (收起式，点击展开)
     │
     /settings
-    ├── API Keys 管理 (ElevenLabs / D-ID / Image Gen)
+    ├── API Keys 管理 (ElevenLabs / D-ID)
+    ├── 图像生成高级配置 (request URL / API key / model)
     ├── LLM 配置 (built-in 模型选择 / custom)
     ├── 生图 Provider 配置
     ├── 语言切换

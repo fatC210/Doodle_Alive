@@ -22,8 +22,8 @@
 
 ## 阶段 3：魔法变身与图像生成
 - 实现 Magic Morphing 动画：粒子、彩虹旋涡、进度时间线。
-- 建立 Image Gen Adapter 层：OpenAI DALL-E 3、Stability AI、Custom HTTP Provider。
-- 实现自定义 Provider 的 Endpoint、JSON Request Template、JSONPath 图片 URL 提取。
+- 建立 Image Gen Adapter 层：OpenAI 兼容、Stability AI、Custom HTTP Provider。
+- 实现 OpenAI 兼容 Provider 的请求地址、API 密钥、模型名配置。
 - 处理无效图片、超时、Key 缺失、重试、换风格、返回重画。
 - 保存原始画作、生成图、风格、颜色特征和状态记录。
 
@@ -55,7 +55,7 @@
 - 设置单次对话时长、空闲超时、家长提示与安全说明。
 
 ## 阶段 8：设置与本地存储
-- API Keys 管理：ElevenLabs、D-ID、Image Gen，全部 localStorage 保存。
+- API Keys 管理：ElevenLabs、D-ID；图像生成密钥走高级配置并加密保存。
 - 用 Web Crypto AES-GCM 加密 Key，不在明文中保存。
 - Key 验证：ElevenLabs GET /v1/user、D-ID GET /avatars、生图测试请求。
 - LLM Source 支持 built-in / custom，Custom 支持 API Key 与 OpenAI-compatible endpoint。
@@ -63,7 +63,7 @@
 - 实现数据导出、清空、隐私说明。
 
 ## 阶段 9：测试、性能与发布
-- 单元测试：颜色采样、Prompt 组装、JSONPath 提取、状态机分支。
+- 单元测试：颜色采样、Prompt 组装、图像请求体、状态机分支。
 - 组件测试：绘画、风格选择、设置验证、Text Mode、错误提示。
 - E2E 冒烟：创建角色 → 变身 → 人格 → 进入聊天。
 - 性能优化：图片压缩、懒加载、WebRTC 资源释放、IndexedDB 清理。
