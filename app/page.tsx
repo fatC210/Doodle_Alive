@@ -18,7 +18,7 @@ export default function HomePage() {
           <h1>{t('homeHeroTitle').split('\n').map((line, index) => <span key={line}>{line}{index === 0 ? <br /> : null}</span>)}</h1>
           <p>{t('homeHeroCopy')}</p>
           <div className="hero-actions">
-            <Link className="primary-button" href="/create"><Sparkles size={20} /> {t('newCharacter')}</Link>
+            <Link className="primary-button" href="/create?new=1"><Sparkles size={20} /> {t('newCharacter')}</Link>
           </div>
         </div>
         <div className="hero-art" role="img" aria-label="A doodle drawing coming alive through a colorful magic portal" />

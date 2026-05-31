@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Sparkles } from 'lucide-react';
+import { getPersonaConfigIssues } from '@/lib/config-requirements';
 import { personas, pickRandomPersona, styles } from '@/lib/data';
 import { createElevenAgent, buildAgentPrompt } from '@/lib/elevenlabs';
 import { useLanguage } from '@/lib/i18n';
@@ -17,6 +18,7 @@ export function PersonaSelector() {
   const [selectedId, setSelectedId] = useState('random');
   const [saving, setSaving] = useState(false);
   const [agentMessage, setAgentMessage] = useState('');
+  const [needsElevenLabsKey, setNeedsElevenLabsKey] = useState(false);
   const [generatedDataUrl, setGeneratedDataUrl] = useState('');
   const [styleId, setStyleId] = useState('watercolor');
   const selected = useMemo(() => personas.find((persona) => persona.id === selectedId) ?? personas.find((persona) => persona.id === 'random') ?? pickRandomPersona(), [selectedId]);
@@ -26,10 +28,19 @@ export function PersonaSelector() {
     queueMicrotask(() => {
       const draft = loadDraft();
       setSelectedId(draft.personaId ?? 'random');
-      setGeneratedDataUrl(draft.generatedDataUrl ?? draft.originalDataUrl ?? '');
+      setGeneratedDataUrl(draft.generatedDataUrl ?? draft.generatedImageUrl ?? draft.originalDataUrl ?? '');
       setStyleId(draft.styleId ?? 'watercolor');
     });
   }, []);
+
+  useEffect(() => {
+    async function checkSetup() {
+      const keys = await loadSecretKeys();
+      const issues = getPersonaConfigIssues(keys);
+      setNeedsElevenLabsKey(Boolean(issues.length));
+    }
+    void checkSetup();
+  }, [t]);
 
   function choose(personaId: string) {
     setSelectedId(personaId);
@@ -45,6 +56,12 @@ export function PersonaSelector() {
 
   async function startChat() {
     if (saving) return;
+    const keys = await loadSecretKeys();
+    if (getPersonaConfigIssues(keys).length) {
+      setNeedsElevenLabsKey(true);
+      return;
+    }
+    setNeedsElevenLabsKey(false);
     setSaving(true);
     try {
       const draft = loadDraft();
@@ -55,8 +72,7 @@ export function PersonaSelector() {
       const persona = selected.id === 'random' ? randomPersona : selected;
       const id = `character-${Date.now()}`;
       const originalImage = draft.originalDataUrl ? await dataUrlToBlob(draft.originalDataUrl) : undefined;
-      const generatedImage = draft.generatedDataUrl ? await dataUrlToBlob(draft.generatedDataUrl) : undefined;
-      const keys = await loadSecretKeys();
+      const generatedImage = draft.generatedDataUrl?.startsWith('data:') ? await dataUrlToBlob(draft.generatedDataUrl) : undefined;
       const settings = loadSettings();
       const agent = await createElevenAgent({
         apiKey: keys.elevenLabs,
@@ -79,7 +95,8 @@ export function PersonaSelector() {
         originalImage,
         originalDataUrl: draft.originalDataUrl,
         generatedImage,
-        generatedDataUrl: draft.generatedDataUrl,
+        generatedDataUrl: draft.generatedDataUrl || draft.generatedImageUrl,
+        generatedImageUrl: draft.generatedImageUrl,
         accentColors: draft.accentColors,
         prompt: draft.prompt ?? '',
         avatarId: draft.avatarId,
@@ -98,6 +115,8 @@ export function PersonaSelector() {
       setSaving(false);
     }
   }
+
+  const setupIssue = needsElevenLabsKey ? t('elevenLabsKeyMissing') : '';
 
   return (
     <>
@@ -128,9 +147,10 @@ export function PersonaSelector() {
       <div className="bottom-nav">
         <Link className="outline-button" href="/create/morph">← {t('back')}</Link>
         <button className="ghost-button" type="button" onClick={skipRandom}><Box size={18} /> {t('skipRandom')}</button>
-        <button className={`primary-button ${saving ? 'disabled' : ''}`} type="button" onClick={startChat}><Sparkles size={18} /> {saving ? t('saving') : `${t('startChatting')} →`}</button>
+        {setupIssue ? <Link className="outline-button" href="/settings">{t('openSettings')}</Link> : null}
+        <button className={`primary-button ${saving || setupIssue ? 'disabled' : ''}`} type="button" onClick={startChat}><Sparkles size={18} /> {saving ? t('saving') : `${t('startChatting')} →`}</button>
       </div>
-      <div className="info-bar">🔒 {t('changeLater')}</div>
+      <div className={setupIssue ? 'inline-warning' : 'info-bar'}>{setupIssue || `🔒 ${t('changeLater')}`}</div>
     </>
   );
 }

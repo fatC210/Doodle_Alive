@@ -6,14 +6,15 @@ import { Brush, Eraser, Eye, RotateCcw, Sparkles, Target, Trash2, Upload } from 
 import { pickRandomStyle } from '@/lib/data';
 import { useLanguage } from '@/lib/i18n';
 import { buildImagePrompt, extractAccentColors, hasVisibleCanvasContent } from '@/lib/prompt';
-import { loadDraft, saveDraft } from '@/lib/storage';
+import { clearDraft, loadDraft, saveDraft } from '@/lib/storage';
 
 const CANVAS_SIZE = 1024;
 const colors = ['#ff4545', '#ff982d', '#ffe122', '#78d843', '#12b6a5', '#1376d8', '#ff5fae', '#7b482a', '#151515', '#f8fbff', '#8b5cf6'];
+const DEFAULT_BRUSH_COLOR = '#151515';
 const backgrounds = ['#ffffff', '#ffdce8', '#fff6bf', '#dff8e6', '#d9f3ff', '#eee5ff'];
 const brushSizes = [8, 18, 34];
 
-export function DrawingCanvas() {
+export function DrawingCanvas({ freshStart = false }: { freshStart?: boolean }) {
   const router = useRouter();
   const { t } = useLanguage();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -22,7 +23,7 @@ export function DrawingCanvas() {
   const undoStackRef = useRef<ImageData[]>([]);
   const uploadImageRef = useRef<HTMLImageElement | null>(null);
   const uploadPanRef = useRef<{ x: number; y: number } | null>(null);
-  const [color, setColor] = useState(colors[5]);
+  const [color, setColor] = useState(DEFAULT_BRUSH_COLOR);
   const [customColor, setCustomColor] = useState('#ffffff');
   const [brushSize, setBrushSize] = useState(18);
   const [backgroundColor, setBackgroundColor] = useState('#ffffff');
@@ -36,6 +37,10 @@ export function DrawingCanvas() {
     const canvas = canvasRef.current;
     const context = canvas?.getContext('2d', { willReadFrequently: true });
     if (!canvas || !context) return;
+    if (freshStart) {
+      clearDraft();
+      router.replace('/create', { scroll: false });
+    }
     const draft = loadDraft();
     setValidationMessage(draft.didValidationMessage ?? '');
     context.fillStyle = draft.backgroundColor || '#ffffff';
@@ -47,7 +52,7 @@ export function DrawingCanvas() {
       image.onload = () => context.drawImage(image, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
       image.src = draft.originalDataUrl;
     }
-  }, []);
+  }, [freshStart, router]);
 
   function getContext() {
     const context = canvasRef.current?.getContext('2d', { willReadFrequently: true });

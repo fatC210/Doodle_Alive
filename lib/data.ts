@@ -46,12 +46,13 @@ export const apiKeys = [
 export const defaultSettings: AdvancedSettings = {
   llmSource: 'built-in',
   builtInModel: 'gpt-4o-mini',
+  customLlmModel: '',
   customLlmKey: '',
   customLlmEndpoint: '',
   imageProvider: 'custom',
   customImageKey: '',
-  customImageModel: '',
-  customImageEndpoint: '',
+  customImageModel: 'openai/gpt-image-2',
+  customImageEndpoint: 'https://router.shengsuanyun.com/api',
   language: 'en',
 };
 

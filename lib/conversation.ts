@@ -6,8 +6,8 @@ export async function generateCharacterReply(input: string, character: DoodleCha
   const safeInput = sanitizeForChild(input);
   if (safeInput !== input.trim()) return safeInput;
 
-  if (settings.llmSource !== 'custom' || !settings.customLlmEndpoint || !settings.customLlmKey) {
-    throw new Error('A custom LLM endpoint and key are required before chat can generate replies.');
+  if (settings.llmSource !== 'custom' || !settings.customLlmModel || !settings.customLlmEndpoint || !settings.customLlmKey) {
+    throw new Error('A custom LLM model, endpoint, and key are required before chat can generate replies.');
   }
 
   const response = await fetch(settings.customLlmEndpoint, {
@@ -17,7 +17,7 @@ export async function generateCharacterReply(input: string, character: DoodleCha
       Authorization: `Bearer ${settings.customLlmKey}`,
     },
     body: JSON.stringify({
-      model: settings.builtInModel || 'gpt-4o-mini',
+      model: settings.customLlmModel,
       messages: [
         { role: 'system', content: character.personaPrompt || personas.find((persona) => persona.id === character.personaId)?.systemPrompt || '' },
         { role: 'user', content: input },

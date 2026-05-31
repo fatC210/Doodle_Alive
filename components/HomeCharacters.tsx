@@ -34,7 +34,7 @@ export function HomeCharacters({ onCountChange }: { onCountChange?: (count: numb
 
   if (!characters.length) {
     return (
-      <Link href="/create" className="character-card empty-state">
+      <Link href="/create?new=1" className="character-card empty-state">
         <span className="primary-button small">+ {t('newCharacter')}</span>
       </Link>
     );
@@ -66,7 +66,7 @@ export function HomeCharacters({ onCountChange }: { onCountChange?: (count: numb
             </article>
           );
         })}
-        <Link href="/create" className="character-card new-card">
+        <Link href="/create?new=1" className="character-card new-card">
           <span className="wand"><Wand2 size={56} /></span>
           <b>{t('createNewCharacter')}</b>
           <small>{t('createNewCharacterCopy')}</small>

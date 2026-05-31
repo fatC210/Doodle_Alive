@@ -249,23 +249,11 @@ export function setStoredItem(key: string, value: string) {
 
 export function removeStoredItem(key: string) {
   if (typeof window === 'undefined') return;
+  memoryStorage.delete(key);
   try {
     window.localStorage?.removeItem(key);
   } catch {
-    memoryStorage.delete(key);
-  }
-  if (!hasLocalStorage()) memoryStorage.delete(key);
-}
-
-function hasLocalStorage() {
-  try {
-    if (typeof window === 'undefined' || !window.localStorage) return false;
-    const probe = '__doodle_storage_probe__';
-    window.localStorage.setItem(probe, '1');
-    window.localStorage.removeItem(probe);
-    return true;
-  } catch {
-    return false;
+    return;
   }
 }
 

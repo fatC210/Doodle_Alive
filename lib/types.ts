@@ -42,6 +42,7 @@ export interface DoodleCharacter {
   originalDataUrl?: string;
   generatedImage?: Blob;
   generatedDataUrl?: string;
+  generatedImageUrl?: string;
   accentColors: string[];
   prompt: string;
   avatarId?: string;
@@ -69,6 +70,7 @@ export interface CreationDraft {
   generatedDataUrl?: string;
   generatedImageUrl?: string;
   styleId?: string;
+  styleChoiceMode?: 'manual' | 'random';
   personaId?: string;
   avatarId?: string;
   avatarSourceUrl?: string;
@@ -84,6 +86,7 @@ export interface CreationDraft {
 export interface AdvancedSettings {
   llmSource: 'built-in' | 'custom';
   builtInModel: string;
+  customLlmModel: string;
   customLlmKey: string;
   customLlmEndpoint: string;
   imageProvider: ImageProviderType;
@@ -112,7 +115,6 @@ export interface ImageGenerationRequest {
   model?: string;
   apiKey?: string;
   endpoint?: string;
-  timeoutMs?: number;
 }
 
 export interface ImageGenerationResult {
@@ -120,6 +122,7 @@ export interface ImageGenerationResult {
   imageDataUrl?: string;
   blob?: Blob;
   provider: ImageProviderType;
+  warning?: string;
 }
 
 export interface DidAvatarResult {

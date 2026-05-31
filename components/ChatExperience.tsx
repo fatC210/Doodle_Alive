@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Image as ImageIcon, Mic, Send, Volume2, X } from 'lucide-react';
+import { getCustomChatConfigIssues } from '@/lib/config-requirements';
 import { generateCharacterReply } from '@/lib/conversation';
 import { useLanguage } from '@/lib/i18n';
 import { loadCustomLlmKey, loadSecretKeys, missingRequiredKeys } from '@/lib/secrets';
@@ -19,6 +20,7 @@ export function ChatExperience({ characterId }: { characterId: string }) {
   const [text, setText] = useState('');
   const [textMode, setTextMode] = useState(false);
   const [textInputOpen, setTextInputOpen] = useState(false);
+  const [needsCustomChatConfig, setNeedsCustomChatConfig] = useState(false);
   const [connection, setConnection] = useState<RealtimeConnectionState>({
     live: 'idle',
     stt: 'idle',
@@ -56,6 +58,10 @@ export function ChatExperience({ characterId }: { characterId: string }) {
     async function prepare() {
       const tx = tRef.current;
       const keys = await loadSecretKeys();
+      const settings = loadSettings();
+      const customLlmKey = await loadCustomLlmKey();
+      const customChatIssues = getCustomChatConfigIssues(settings, customLlmKey);
+      setNeedsCustomChatConfig(Boolean(customChatIssues.length));
       const missing = missingRequiredKeys(keys);
       if (missing.elevenLabs || missing.did) {
         setTextMode(true);
@@ -93,13 +99,20 @@ export function ChatExperience({ characterId }: { characterId: string }) {
     if (!display) return;
     const trimmed = value.trim();
     if (!trimmed) return;
+    const settings = { ...loadSettings(), customLlmKey: await loadCustomLlmKey() };
+    if (getCustomChatConfigIssues(settings, settings.customLlmKey).length) {
+      const message = t('customLlmConfigMissing');
+      setNeedsCustomChatConfig(true);
+      setConnection((current) => ({ ...current, agent: 'error', avatar: 'ready', message }));
+      return;
+    }
+    setNeedsCustomChatConfig(false);
     const userMessage: ChatMessage = { id: `msg-${Date.now()}`, characterId, role: 'user', content: trimmed, timestamp: new Date().toISOString() };
     setConnection((current) => ({ ...current, agent: 'thinking', avatar: 'thinking', message: `${display.name} ${t('thinking')}` }));
     setMessages((items) => [...items, userMessage]);
     setText('');
     await saveMessage(userMessage);
     try {
-      const settings = { ...loadSettings(), customLlmKey: await loadCustomLlmKey() };
       const replyContent = await generateCharacterReply(trimmed, display, settings);
       const reply: ChatMessage = {
         id: `msg-${Date.now() + 1}`,
@@ -155,6 +168,8 @@ export function ChatExperience({ characterId }: { characterId: string }) {
     });
   }
 
+  const setupIssue = needsCustomChatConfig ? t('customLlmConfigMissing') : '';
+
   if (!loaded) {
     return (
       <div className="page-shell">
@@ -174,7 +189,7 @@ export function ChatExperience({ characterId }: { characterId: string }) {
         <section className="ready-card card error-card">
           <span className="check-big">!</span>
           <span><h2>{t('characterNotFound')}</h2><p className="subtitle">{t('characterNotFoundCopy')}</p></span>
-          <Link className="primary-button" href="/create">{t('newCharacter')}</Link>
+          <Link className="primary-button" href="/create?new=1">{t('newCharacter')}</Link>
         </section>
       </div>
     );
@@ -192,6 +207,7 @@ export function ChatExperience({ characterId }: { characterId: string }) {
           </aside>
           <div className="text-chat card">
             <div className="text-alert"><span>🎙️ {t('micUnavailable')}<small>{t('micUnavailableCopy')}</small></span><span className="voice-chip">{t('textModeActiveCaps')}</span></div>
+            {setupIssue ? <div className="inline-warning">{setupIssue} <Link className="back-link" href="/settings">{t('openSettings')}</Link></div> : null}
             <MessageList messages={messages} character={display} />
             <div className="input-area">
               <div className="mode-note"><span>💬 {t('textChatting')}<br /><small>{t('micOffCopy')}</small></span><X size={18} /></div>
@@ -207,6 +223,7 @@ export function ChatExperience({ characterId }: { characterId: string }) {
   return (
     <div className="page-shell">
       <div className="chat-topline"><Link className="back-link" href="/">← {t('backToCharacters')}</Link><b>/chat</b><button className="ghost-button" onClick={endChat}>☎ {t('endChat')}</button></div>
+      {setupIssue ? <div className="inline-warning">{setupIssue} <Link className="back-link" href="/settings">{t('openSettings')}</Link></div> : null}
       <section className="chat-layout">
         <div className="video-card card">
           <span className="live-badge">● {t('live')}</span>
