@@ -15,6 +15,7 @@ export interface StylePreset {
   desc: string;
   prompt: string;
   tone: string;
+  image: string;
 }
 
 export interface PersonaPreset {
@@ -24,6 +25,7 @@ export interface PersonaPreset {
   desc: string;
   systemPrompt: string;
   voice: string;
+  voiceZh: string;
   voiceId: string;
   icon: string;
   tone: string;
@@ -71,6 +73,7 @@ export interface CreationDraft {
   generatedImageUrl?: string;
   styleId?: string;
   styleChoiceMode?: 'manual' | 'random';
+  characterName?: string;
   personaId?: string;
   avatarId?: string;
   avatarSourceUrl?: string;

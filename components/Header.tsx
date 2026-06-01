@@ -9,9 +9,11 @@ import { useLanguage } from '@/lib/i18n';
 export function Header() {
   const pathname = usePathname();
   const { t } = useLanguage();
+  if (pathname.startsWith('/chat/')) return null;
+
   const navItems = [
     { href: '/', activePath: '/', label: t('navHome'), icon: Home },
-    { href: '/create?new=1', activePath: '/create', label: t('navCreate'), icon: Wand2 },
+    { href: '/create', activePath: '/create', label: t('navCreate'), icon: Wand2 },
     { href: '/settings', activePath: '/settings', label: t('navSettings'), icon: Settings },
   ];
 

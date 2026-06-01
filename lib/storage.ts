@@ -37,6 +37,12 @@ export async function saveCharacter(character: DoodleCharacter) {
   return put(CHARACTER_STORE, character);
 }
 
+export async function deleteCharacter(characterId: string) {
+  await removeByKey(CHARACTER_STORE, characterId);
+  const messages = await getMessages(characterId);
+  await Promise.all(messages.map((message) => removeByKey(MESSAGE_STORE, message.id)));
+}
+
 export async function getMessages(characterId: string) {
   const messages = await getAll<ChatMessage>(MESSAGE_STORE);
   return messages.filter((message) => message.characterId === characterId).sort((a, b) => a.timestamp.localeCompare(b.timestamp));

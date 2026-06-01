@@ -31,10 +31,14 @@ export async function validateDidAvatarForGeneratedImage(args: {
   didKey: string;
   imageProvider: AdvancedSettings['imageProvider'];
   generatedImageUrl?: string;
+  generatedImageDataUrl?: string;
+  generatedImageBlob?: Blob;
 }) {
   return createDidAvatar({
     apiKey: args.didKey,
     imageUrl: args.generatedImageUrl,
+    imageDataUrl: args.generatedImageDataUrl,
+    imageBlob: args.generatedImageBlob,
     provider: args.imageProvider,
   });
 }

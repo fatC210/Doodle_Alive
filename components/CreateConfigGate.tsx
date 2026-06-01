@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { AlertTriangle, Settings, Wand2 } from 'lucide-react';
+import { AlertTriangle, Settings } from 'lucide-react';
 import { ReactNode, useEffect, useState } from 'react';
 import { getMorphingConfigIssues, type ConfigIssue } from '@/lib/config-requirements';
 import { useLanguage } from '@/lib/i18n';
@@ -47,22 +47,20 @@ export function CreateConfigGate({ children }: { children: ReactNode }) {
 
   const currentState: GateViewState = shouldGuard && state.path !== pathname ? { path: pathname, status: 'checking' } : state;
 
-  if (!shouldGuard || currentState.status === 'ready') return <>{children}</>;
+  if (!shouldGuard || currentState.status === 'ready' || currentState.status === 'checking') return <>{children}</>;
 
   return (
     <div className="page-shell">
       <section className="create-config-gate card" aria-live="polite">
-        <span className="gate-icon">{currentState.status === 'checking' ? <Wand2 size={34} /> : <AlertTriangle size={34} />}</span>
+        <span className="gate-icon"><AlertTriangle size={34} /></span>
         <div>
-          <h1>{currentState.status === 'checking' ? t('preparingCharacter') : t('morphingNeedsAttention')}</h1>
-          <p className="subtitle">{currentState.status === 'checking' ? t('morphingCopy') : createConfigMessage(currentState.issue, t)}</p>
+          <h1>{t('morphingNeedsAttention')}</h1>
+          <p className="subtitle">{createConfigMessage(currentState.issue, t)}</p>
         </div>
-        {currentState.status === 'blocked' ? (
-          <div className="gate-actions">
-            <Link className="primary-button" href="/settings/advanced"><Settings size={18} /> {t('openSettings')}</Link>
-            <Link className="ghost-button" href="/">{t('navHome')}</Link>
-          </div>
-        ) : null}
+        <div className="gate-actions">
+          <Link className="primary-button" href="/settings/advanced"><Settings size={18} /> {t('openSettings')}</Link>
+          <Link className="ghost-button" href="/">{t('navHome')}</Link>
+        </div>
       </section>
     </div>
   );

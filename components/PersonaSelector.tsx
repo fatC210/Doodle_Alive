@@ -3,14 +3,28 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Box, Sparkles } from 'lucide-react';
+import { Check, Compass, Dice5, Drama, FlaskConical, Glasses, HeartHandshake, LockKeyhole, Mic2, Palette, Sparkles, type LucideIcon } from 'lucide-react';
+import { generateRandomCharacterName } from '@/lib/character-name';
 import { getPersonaConfigIssues } from '@/lib/config-requirements';
-import { personas, pickRandomPersona, styles } from '@/lib/data';
+import { DEFAULT_STYLE_ID, personas, pickRandomPersona, styles } from '@/lib/data';
 import { createElevenAgent, buildAgentPrompt } from '@/lib/elevenlabs';
 import { useLanguage } from '@/lib/i18n';
+import type { LanguageCode, PersonaPreset } from '@/lib/types';
 import { loadSecretKeys } from '@/lib/secrets';
 import { clearDraft, dataUrlToBlob, loadDraft, loadSettings, saveCharacter, saveDraft } from '@/lib/storage';
-import { DoodleDrawing, MagicPortal } from './Illustrations';
+
+const personaIcons: Record<string, LucideIcon> = {
+  'brave-explorer': Compass,
+  'mischievous-prankster': Drama,
+  'gentle-guardian': HeartHandshake,
+  'wacky-inventor': FlaskConical,
+  'cool-rebel': Glasses,
+  random: Dice5,
+};
+
+function getPersonaVoice(persona: PersonaPreset, language: LanguageCode) {
+  return language === 'zh' ? persona.voiceZh : persona.voice;
+}
 
 export function PersonaSelector() {
   const router = useRouter();
@@ -20,16 +34,18 @@ export function PersonaSelector() {
   const [agentMessage, setAgentMessage] = useState('');
   const [needsElevenLabsKey, setNeedsElevenLabsKey] = useState(false);
   const [generatedDataUrl, setGeneratedDataUrl] = useState('');
-  const [styleId, setStyleId] = useState('watercolor');
+  const [styleId, setStyleId] = useState(DEFAULT_STYLE_ID);
+  const [characterName, setCharacterName] = useState('');
   const selected = useMemo(() => personas.find((persona) => persona.id === selectedId) ?? personas.find((persona) => persona.id === 'random') ?? pickRandomPersona(), [selectedId]);
-  const selectedStyle = useMemo(() => styles.find((style) => style.id === styleId) ?? styles[0], [styleId]);
+  const selectedStyle = useMemo(() => styles.find((style) => style.id === styleId) ?? styles.find((style) => style.id === DEFAULT_STYLE_ID) ?? styles[0], [styleId]);
 
   useEffect(() => {
     queueMicrotask(() => {
       const draft = loadDraft();
       setSelectedId(draft.personaId ?? 'random');
       setGeneratedDataUrl(draft.generatedDataUrl ?? draft.generatedImageUrl ?? draft.originalDataUrl ?? '');
-      setStyleId(draft.styleId ?? 'watercolor');
+      setStyleId(draft.styleId ?? DEFAULT_STYLE_ID);
+      setCharacterName(draft.characterName ?? '');
     });
   }, []);
 
@@ -44,18 +60,24 @@ export function PersonaSelector() {
 
   function choose(personaId: string) {
     setSelectedId(personaId);
+    setAgentMessage('');
     saveDraft({ step: 'PERSONA', personaId });
   }
 
-  function skipRandom() {
-    const picked = pickRandomPersona();
-    setSelectedId('random');
-    saveDraft({ step: 'PERSONA', personaId: picked.id });
-    setAgentMessage(`${t('randomPicked')}: ${language === 'zh' ? picked.nameZh : picked.name}`);
+  function updateCharacterName(value: string) {
+    setCharacterName(value);
+    setAgentMessage('');
+    saveDraft({ step: 'PERSONA', characterName: value });
   }
 
   async function startChat() {
     if (saving) return;
+    const enteredCharacterName = characterName.trim();
+    const finalCharacterName = enteredCharacterName || generateRandomCharacterName(language);
+    if (!enteredCharacterName) {
+      setCharacterName(finalCharacterName);
+      saveDraft({ step: 'PERSONA', characterName: finalCharacterName });
+    }
     const keys = await loadSecretKeys();
     if (getPersonaConfigIssues(keys).length) {
       setNeedsElevenLabsKey(true);
@@ -74,18 +96,20 @@ export function PersonaSelector() {
       const originalImage = draft.originalDataUrl ? await dataUrlToBlob(draft.originalDataUrl) : undefined;
       const generatedImage = draft.generatedDataUrl?.startsWith('data:') ? await dataUrlToBlob(draft.generatedDataUrl) : undefined;
       const settings = loadSettings();
+      const characterDetails = { name: finalCharacterName, styleName: selectedStyle.name, prompt: draft.prompt ?? '' };
       const agent = await createElevenAgent({
         apiKey: keys.elevenLabs,
         persona,
-        character: { name: 'Lumi', styleName: selectedStyle.name, prompt: draft.prompt ?? '' },
+        character: characterDetails,
         llmSource: settings.llmSource,
         model: settings.builtInModel,
+        customLlmModel: settings.customLlmModel,
         customLlmEndpoint: settings.customLlmEndpoint,
       });
-      const personaPrompt = buildAgentPrompt(persona, { name: 'Lumi', styleName: selectedStyle.name, prompt: draft.prompt ?? '' });
+      const personaPrompt = buildAgentPrompt(persona, characterDetails);
       await saveCharacter({
         id,
-        name: 'Lumi',
+        name: finalCharacterName,
         styleId: selectedStyle.id,
         styleName: selectedStyle.name,
         personaId: persona.id,
@@ -117,40 +141,48 @@ export function PersonaSelector() {
   }
 
   const setupIssue = needsElevenLabsKey ? t('elevenLabsKeyMissing') : '';
+  const SelectedIcon = personaIcons[selected.id] ?? Dice5;
 
   return (
     <>
       <section className="persona-layout">
         <div>
-          <h1 className="create-title">{t('choosePersonality')} ✨</h1>
+          <h1 className="create-title persona-title">{t('choosePersonality')}</h1>
           <p className="subtitle">{t('choosePersonalityCopy')}</p>
+          <label className="character-name-field form-field">
+            <span>{t('characterName')}</span>
+            <input value={characterName} maxLength={32} onChange={(event) => updateCharacterName(event.target.value)} placeholder={t('characterNamePlaceholder')} aria-label={t('characterName')} />
+          </label>
           <div className="persona-grid">
-            {personas.map((persona) => (
-              <button key={persona.id} className={`persona-card ${persona.id === selected.id ? 'selected' : ''}`} type="button" onClick={() => choose(persona.id)}>
-                {persona.id === selected.id ? <span className="selected-check">✓</span> : null}
-                <div className="persona-emoji">{persona.icon}</div>
-                <h3>{language === 'zh' ? persona.nameZh : persona.name}</h3>
-                <p>{persona.desc}</p>
-                <span className="voice-chip">🎙 {persona.voice}</span>
-              </button>
-            ))}
+            {personas.map((persona) => {
+              const PersonaIcon = personaIcons[persona.id] ?? Dice5;
+              return (
+                <button key={persona.id} className={`persona-card ${persona.id === selected.id ? 'selected' : ''}`} type="button" onClick={() => choose(persona.id)}>
+                  {persona.id === selected.id ? <span className="selected-check"><Check size={18} aria-hidden="true" /></span> : null}
+                  <div className="persona-icon"><PersonaIcon size={58} strokeWidth={1.8} aria-hidden="true" /></div>
+                  <h3>{language === 'zh' ? persona.nameZh : persona.name}</h3>
+                  <p>{persona.desc}</p>
+                  <span className="voice-chip"><Mic2 size={14} aria-hidden="true" /> {getPersonaVoice(persona, language)}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
         <aside className="preview-panel card">
-          <h3>✨ {t('characterPreview')}</h3>
-          <div className="preview-frame persona-preview" style={{ position: 'relative' }}>{generatedDataUrl ? <img className="preview-image" src={generatedDataUrl} alt={t('characterPreview')} /> : <DoodleDrawing />}<MagicPortal /></div>
-          <div className="settings-card" style={{ padding: 18, marginTop: 20 }}><b>{t('selectedStyle')}</b><div className="voice-chip" style={{ marginTop: 12 }}>✨ {language === 'zh' ? selectedStyle.nameZh : selectedStyle.name}</div></div>
-          <div className="settings-card" style={{ padding: 18, marginTop: 20 }}><b>{t('selectedPersona')}</b><div className="choice-row"><span className="persona-emoji" style={{ width: 58, height: 58, fontSize: 34 }}>{selected.icon}</span><span><b>{language === 'zh' ? selected.nameZh : selected.name}</b><br /><span className="voice-chip">{selected.voice}</span></span></div>{agentMessage ? <p className="subtitle">{agentMessage}</p> : null}</div>
+          <h3>{t('characterPreview')}</h3>
+          <div className="preview-frame persona-preview">{generatedDataUrl ? <img className="preview-image" src={generatedDataUrl} alt={t('characterPreview')} /> : null}</div>
+          <div className="settings-card" style={{ padding: 18, marginTop: 20 }}><b>{t('characterName')}</b><div className="character-preview-name">{characterName.trim() || t('characterNamePlaceholder')}</div></div>
+          <div className="settings-card" style={{ padding: 18, marginTop: 20 }}><b>{t('selectedStyle')}</b><div className="voice-chip" style={{ marginTop: 12 }}><Palette size={14} aria-hidden="true" /> {language === 'zh' ? selectedStyle.nameZh : selectedStyle.name}</div></div>
+          <div className="settings-card" style={{ padding: 18, marginTop: 20 }}><b>{t('selectedPersona')}</b><div className="choice-row"><span className="persona-icon persona-icon-small"><SelectedIcon size={30} strokeWidth={1.9} aria-hidden="true" /></span><span><b>{language === 'zh' ? selected.nameZh : selected.name}</b><br /><span className="voice-chip"><Mic2 size={14} aria-hidden="true" /> {getPersonaVoice(selected, language)}</span></span></div>{agentMessage ? <p className="subtitle">{agentMessage}</p> : null}</div>
         </aside>
       </section>
 
       <div className="bottom-nav">
         <Link className="outline-button" href="/create/morph">← {t('back')}</Link>
-        <button className="ghost-button" type="button" onClick={skipRandom}><Box size={18} /> {t('skipRandom')}</button>
         {setupIssue ? <Link className="outline-button" href="/settings">{t('openSettings')}</Link> : null}
         <button className={`primary-button ${saving || setupIssue ? 'disabled' : ''}`} type="button" onClick={startChat}><Sparkles size={18} /> {saving ? t('saving') : `${t('startChatting')} →`}</button>
       </div>
-      <div className={setupIssue ? 'inline-warning' : 'info-bar'}>{setupIssue || `🔒 ${t('changeLater')}`}</div>
+      <div className={setupIssue ? 'inline-warning' : 'info-bar'}>{setupIssue || <><LockKeyhole size={16} aria-hidden="true" /> {t('changeLater')}</>}</div>
     </>
   );
 }

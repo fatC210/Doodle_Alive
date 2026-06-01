@@ -24,8 +24,9 @@ export function getPersonaConfigIssues(keys: SecretKeys): ConfigIssue[] {
 }
 
 export function getCustomChatConfigIssues(settings: AdvancedSettings, customLlmKey: string): ConfigIssue[] {
+  if (settings.llmSource !== 'custom') return [];
+
   return [
-    settings.llmSource === 'custom' ? null : 'customLlmSource',
     settings.customLlmModel ? null : 'customLlmModel',
     settings.customLlmEndpoint ? null : 'customLlmEndpoint',
     customLlmKey ? null : 'customLlmKey',

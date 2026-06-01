@@ -1,20 +1,18 @@
 import type { AdvancedSettings, PersonaPreset, StylePreset } from './types';
 
-export const styles: StylePreset[] = [
-  { id: 'pixar-3d', name: 'Pixar 3D', nameZh: '皮克斯 3D', desc: 'Bright, soft, and full of life. Brings your character into a 3D animated world.', prompt: 'Pixar style 3D rendered character, soft lighting, expressive', tone: 'pixar' },
-  { id: 'disney-classic', name: 'Disney Classic', nameZh: '迪士尼经典', desc: 'Warm hand-drawn fairytale charm with friendly expressions.', prompt: 'Classic Disney hand-drawn animation style, warm colors', tone: 'disney' },
-  { id: 'anime', name: 'Anime', nameZh: '日系动漫', desc: 'Detailed eyes with cel-shaded energy and clean line art.', prompt: 'Japanese anime style, detailed eyes, cel-shaded', tone: 'anime' },
-  { id: 'western-comic', name: 'Western Comic', nameZh: '美漫', desc: 'Bold heroic outlines, bright action and graphic shapes.', prompt: 'Western comic book style, bold outlines, halftone shading', tone: 'comic' },
-  { id: 'watercolor', name: 'Watercolor', nameZh: '水彩', desc: 'Soft edges, pastel tones and gentle handmade texture.', prompt: 'Watercolor painting style, soft edges, pastel tones', tone: 'watercolor' },
-  { id: 'pixel-art', name: 'Pixel Art', nameZh: '像素风', desc: 'Retro 16-bit game character spirit with chunky shapes.', prompt: '16-bit pixel art style, retro game character sprite', tone: 'pixel' },
-  { id: 'cyberpunk', name: 'Cyberpunk', nameZh: '赛博朋克', desc: 'Neon accents, futuristic details and glowing atmosphere.', prompt: 'Cyberpunk style, neon accents, futuristic', tone: 'cyber' },
-  { id: 'fantasy', name: 'Fantasy', nameZh: '奇幻中世纪', desc: 'Medieval magic, ornate details and a bright magical aura.', prompt: 'Fantasy medieval style, ornate details, magical aura', tone: 'fantasy' },
-  { id: 'chibi-kawaii', name: 'Chibi Kawaii', nameZh: 'Q版可爱', desc: 'Big-head cute, tiny body and playful toy-like proportions.', prompt: 'Chibi kawaii style, super-deformed, big head cute', tone: 'chibi' },
-];
+export const DEFAULT_STYLE_ID = 'american-academy';
 
-export function pickRandomStyle(): StylePreset {
-  return styles[Math.floor(Math.random() * styles.length)] ?? styles[0];
-}
+export const styles: StylePreset[] = [
+  { id: 'american-academy', name: 'American Academy', nameZh: '美式学院', desc: 'Classic campus portrait with warm, natural academic style.', prompt: 'American academy style portrait, classic campus atmosphere, natural light, preppy outfit, warm realistic photography', tone: 'academy', image: '/images/styles/美式学院.png' },
+  { id: 'soft-studio', name: 'Soft Studio', nameZh: '柔光棚拍', desc: 'Clean studio portrait with soft light and gentle shadows.', prompt: 'Soft studio portrait photography, diffused lighting, clean neutral background, realistic face, gentle shadows', tone: 'studio', image: '/images/styles/柔光棚拍.png' },
+  { id: 'pixar-3d', name: 'Pixar 3D', nameZh: '皮克斯3D', desc: 'Bright, soft, and full of life in a 3D animated world.', prompt: 'Pixar style 3D rendered character, soft lighting, expressive, friendly animated portrait', tone: 'pixar', image: '/images/styles/皮克斯3D.png' },
+  { id: 'anime', name: 'Anime', nameZh: '日系动漫', desc: 'Detailed eyes with cel-shaded energy and clean line art.', prompt: 'Japanese anime style, detailed eyes, cel-shaded, clean line art, elegant character portrait', tone: 'anime', image: '/images/styles/日系动漫.png' },
+  { id: 'western-comic', name: 'Western Comic', nameZh: '美漫', desc: 'Bold heroic outlines, bright action and graphic shapes.', prompt: 'Western comic book style, bold outlines, halftone shading, heroic portrait illustration', tone: 'comic', image: '/images/styles/美漫.png' },
+  { id: 'watercolor', name: 'Watercolor', nameZh: '水彩', desc: 'Soft edges, pastel tones and gentle handmade texture.', prompt: 'Watercolor painting style, soft edges, pastel tones, handmade paper texture, gentle portrait', tone: 'watercolor', image: '/images/styles/水彩.png' },
+  { id: 'cyberpunk', name: 'Cyberpunk', nameZh: '赛博朋克', desc: 'Neon accents, futuristic details and glowing atmosphere.', prompt: 'Cyberpunk style, neon accents, futuristic city lights, glossy techwear, cinematic portrait', tone: 'cyber', image: '/images/styles/赛博朋克.png' },
+  { id: 'fantasy-medieval', name: 'Fantasy Medieval', nameZh: '奇幻中世纪', desc: 'Medieval magic, ornate details and a dramatic fantasy aura.', prompt: 'Fantasy medieval style, ornate costume details, magical aura, cinematic royal portrait', tone: 'fantasy', image: '/images/styles/奇幻中世纪.png' },
+  { id: 'chibi-kawaii', name: 'Chibi Kawaii', nameZh: 'Q版可爱', desc: 'Big-head cute, tiny body and playful toy-like proportions.', prompt: 'Chibi kawaii style, super-deformed, big head cute, adorable warm illustration', tone: 'chibi', image: '/images/styles/Q版可爱.png' },
+];
 
 export const childSafetyPrompt = `You are talking to a child. Rules:
 - Never discuss violence, weapons, horror, death, adult topics, self-harm, hate, bullying, drugs, gambling, or private personal data
@@ -25,12 +23,12 @@ export const childSafetyPrompt = `You are talking to a child. Rules:
 - Always be supportive and kind`;
 
 export const personas: PersonaPreset[] = [
-  { id: 'brave-explorer', name: 'Brave Explorer', nameZh: '勇敢探险家', desc: 'Curious, brave, and loves adventure!', voice: 'Warm explorer voice', voiceId: 'JBFqnCBsd6RMkjVDRZzb', icon: '🧭', tone: 'green', systemPrompt: `Be enthusiastic, brave, and encouraging. Tell short exploration stories and invite the child to notice safe, wonderful details.\n${childSafetyPrompt}` },
-  { id: 'mischievous-prankster', name: 'Mischievous Prankster', nameZh: '调皮捣蛋鬼', desc: 'Loves tricks, giggles, and silly surprises!', voice: 'Playful bright voice', voiceId: 'Xb7hH8MSUJpSbSDYk0k2', icon: '🎭', tone: 'purple', systemPrompt: `Be funny, playful, and silly without being mean. Use harmless jokes, wordplay, and pretend surprises only.\n${childSafetyPrompt}` },
-  { id: 'gentle-guardian', name: 'Gentle Guardian', nameZh: '温柔守护者', desc: 'Kind, caring, and always by your side.', voice: 'Gentle calm voice', voiceId: 'EXAVITQu4vr4xnSDxMaL', icon: '💗', tone: 'blue', systemPrompt: `Be patient, comforting, calm, and emotionally supportive. Validate feelings and suggest safe, simple next steps.\n${childSafetyPrompt}` },
-  { id: 'wacky-inventor', name: 'Wacky Inventor', nameZh: '古怪发明家', desc: 'Bright ideas, wild experiments!', voice: 'Quirky inventor voice', voiceId: 'TX3LPaxmHKxFdv7VOQHJ', icon: '🧪', tone: 'orange', systemPrompt: `Be curious, talkative, imaginative, and excited about safe pretend inventions. Keep experiments fictional or harmless.\n${childSafetyPrompt}` },
-  { id: 'cool-rebel', name: 'Cool Rebel', nameZh: '酷叛逆者', desc: 'Confident, chill, and breaks the rules.', voice: 'Cool relaxed voice', voiceId: 'IKne3meq5aSn9XLyUdCD', icon: '🕶️', tone: 'pink', systemPrompt: `Be calm, concise, confident, kind, and lightly witty. Celebrate creativity while staying respectful and safe.\n${childSafetyPrompt}` },
-  { id: 'random', name: 'Random', nameZh: '随机', desc: "Can't decide? Let's go random!", voice: 'Random voice', voiceId: 'random_voice', icon: '🎲', tone: 'violet', systemPrompt: childSafetyPrompt },
+  { id: 'brave-explorer', name: 'Brave Explorer', nameZh: '勇敢探险家', desc: 'Curious, brave, and loves adventure!', voice: 'Warm explorer voice', voiceZh: '温暖探险音色', voiceId: 'JBFqnCBsd6RMkjVDRZzb', icon: '🧭', tone: 'green', systemPrompt: `Be enthusiastic, brave, and encouraging. Tell short exploration stories and invite the child to notice safe, wonderful details.\n${childSafetyPrompt}` },
+  { id: 'mischievous-prankster', name: 'Mischievous Prankster', nameZh: '调皮捣蛋鬼', desc: 'Loves tricks, giggles, and silly surprises!', voice: 'Playful bright voice', voiceZh: '俏皮明亮音色', voiceId: 'Xb7hH8MSUJpSbSDYk0k2', icon: '🎭', tone: 'purple', systemPrompt: `Be funny, playful, and silly without being mean. Use harmless jokes, wordplay, and pretend surprises only.\n${childSafetyPrompt}` },
+  { id: 'gentle-guardian', name: 'Gentle Guardian', nameZh: '温柔守护者', desc: 'Kind, caring, and always by your side.', voice: 'Gentle calm voice', voiceZh: '温柔平静音色', voiceId: 'EXAVITQu4vr4xnSDxMaL', icon: '💗', tone: 'blue', systemPrompt: `Be patient, comforting, calm, and emotionally supportive. Validate feelings and suggest safe, simple next steps.\n${childSafetyPrompt}` },
+  { id: 'wacky-inventor', name: 'Wacky Inventor', nameZh: '古怪发明家', desc: 'Bright ideas, wild experiments!', voice: 'Quirky inventor voice', voiceZh: '古怪发明音色', voiceId: 'TX3LPaxmHKxFdv7VOQHJ', icon: '🧪', tone: 'orange', systemPrompt: `Be curious, talkative, imaginative, and excited about safe pretend inventions. Keep experiments fictional or harmless.\n${childSafetyPrompt}` },
+  { id: 'cool-rebel', name: 'Cool Rebel', nameZh: '酷叛逆者', desc: 'Confident, chill, and breaks the rules.', voice: 'Cool relaxed voice', voiceZh: '酷感放松音色', voiceId: 'IKne3meq5aSn9XLyUdCD', icon: '🕶️', tone: 'pink', systemPrompt: `Be calm, concise, confident, kind, and lightly witty. Celebrate creativity while staying respectful and safe.\n${childSafetyPrompt}` },
+  { id: 'random', name: 'Random', nameZh: '随机', desc: "Can't decide? Let's go random!", voice: 'Random voice', voiceZh: '随机音色', voiceId: 'random_voice', icon: '🎲', tone: 'violet', systemPrompt: childSafetyPrompt },
 ];
 
 export function pickRandomPersona(): PersonaPreset {
@@ -42,6 +40,35 @@ export const apiKeys = [
   { name: 'ElevenLabs API Key', tag: 'Text to Speech', note: 'Not tested', icon: 'Ⅱ' },
   { name: 'D-ID API Key', tag: 'Video Generation', note: 'Not tested', icon: 'D-ID' },
 ];
+
+export const elevenBuiltInModels = [
+  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'Google' },
+  { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', provider: 'Google' },
+  { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview', provider: 'Google' },
+  { id: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview', provider: 'Google' },
+  { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', provider: 'Google' },
+  { id: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite', provider: 'Google' },
+  { id: 'gpt-4o-mini', label: 'GPT-4o mini', provider: 'OpenAI' },
+  { id: 'gpt-4o', label: 'GPT-4o', provider: 'OpenAI' },
+  { id: 'gpt-4.1', label: 'GPT-4.1', provider: 'OpenAI' },
+  { id: 'gpt-4.1-mini', label: 'GPT-4.1 mini', provider: 'OpenAI' },
+  { id: 'gpt-4.1-nano', label: 'GPT-4.1 nano', provider: 'OpenAI' },
+  { id: 'gpt-4-turbo', label: 'GPT-4 Turbo', provider: 'OpenAI' },
+  { id: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', provider: 'OpenAI' },
+  { id: 'gpt-5', label: 'GPT-5', provider: 'OpenAI' },
+  { id: 'gpt-5-mini', label: 'GPT-5 mini', provider: 'OpenAI' },
+  { id: 'gpt-5-nano', label: 'GPT-5 nano', provider: 'OpenAI' },
+  { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', provider: 'Anthropic' },
+  { id: 'claude-sonnet-4', label: 'Claude Sonnet 4', provider: 'Anthropic' },
+  { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', provider: 'Anthropic' },
+  { id: 'claude-3-7-sonnet', label: 'Claude 3.7 Sonnet', provider: 'Anthropic' },
+  { id: 'claude-3-5-sonnet', label: 'Claude 3.5 Sonnet', provider: 'Anthropic' },
+  { id: 'claude-3-haiku', label: 'Claude 3 Haiku', provider: 'Anthropic' },
+  { id: 'gpt-oss-120b', label: 'GPT-OSS 120B', provider: 'ElevenLabs' },
+  { id: 'gpt-oss-20b', label: 'GPT-OSS 20B', provider: 'ElevenLabs' },
+  { id: 'qwen3-30b-a3b', label: 'Qwen 3 30B A3B', provider: 'ElevenLabs' },
+  { id: 'glm-45-air-fp8', label: 'GLM-4.5-Air FP8', provider: 'ElevenLabs' },
+] as const;
 
 export const defaultSettings: AdvancedSettings = {
   llmSource: 'built-in',

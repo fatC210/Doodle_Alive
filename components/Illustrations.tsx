@@ -43,12 +43,10 @@ export function MagicPortal({ children }: { children?: ReactNode }) {
   );
 }
 
-export function StyleThumb({ tone, selected }: { tone: string; selected?: boolean }) {
+export function StyleThumb({ tone, image, label, selected }: { tone: string; image: string; label: string; selected?: boolean }) {
   return (
     <div className={`style-thumb ${tone} ${selected ? 'selected' : ''}`}>
-      <span className="style-face" />
-      <span className="style-shine a" />
-      <span className="style-shine b" />
+      <img src={image} alt={label} />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import type { CreationStep } from './types';
+import type { CreationDraft, CreationStep } from './types';
 
 export const creationFlow: CreationStep[] = ['DRAW', 'STYLE', 'MORPHING', 'PERSONA', 'TALKING'];
 
@@ -16,4 +16,11 @@ export function nextStep(step: CreationStep): CreationStep {
 
 export function previousStep(step: CreationStep): CreationStep {
   return creationFlow[Math.max(creationFlow.indexOf(step) - 1, 0)];
+}
+
+export function getCreationResumePath(draft: Pick<CreationDraft, 'step' | 'originalDataUrl' | 'generatedDataUrl' | 'generatedImageUrl'>) {
+  if (draft.step === 'STYLE' && draft.originalDataUrl) return '/create/style';
+  if (draft.step === 'MORPHING' && draft.originalDataUrl) return '/create/morph';
+  if (draft.step === 'PERSONA' && (draft.generatedDataUrl || draft.generatedImageUrl)) return '/create/persona';
+  return null;
 }

@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Brush, Eraser, Eye, RotateCcw, Sparkles, Target, Trash2, Upload } from 'lucide-react';
-import { pickRandomStyle } from '@/lib/data';
+import { DEFAULT_STYLE_ID } from '@/lib/data';
+import { getCreationResumePath } from '@/lib/flow';
 import { useLanguage } from '@/lib/i18n';
 import { buildImagePrompt, extractAccentColors, hasVisibleCanvasContent } from '@/lib/prompt';
 import { clearDraft, loadDraft, saveDraft } from '@/lib/storage';
@@ -14,7 +15,13 @@ const DEFAULT_BRUSH_COLOR = '#151515';
 const backgrounds = ['#ffffff', '#ffdce8', '#fff6bf', '#dff8e6', '#d9f3ff', '#eee5ff'];
 const brushSizes = [8, 18, 34];
 
-export function DrawingCanvas({ freshStart = false }: { freshStart?: boolean }) {
+type DrawingCanvasProps = {
+  freshStart?: boolean;
+  forceDrawStep?: boolean;
+  resumeDraft?: boolean;
+};
+
+export function DrawingCanvas({ freshStart = false, forceDrawStep = false, resumeDraft = false }: DrawingCanvasProps) {
   const router = useRouter();
   const { t } = useLanguage();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -42,6 +49,16 @@ export function DrawingCanvas({ freshStart = false }: { freshStart?: boolean }) 
       router.replace('/create', { scroll: false });
     }
     const draft = loadDraft();
+    if (!freshStart && resumeDraft) {
+      const resumePath = getCreationResumePath(draft);
+      if (resumePath) {
+        router.replace(resumePath, { scroll: false });
+        return;
+      }
+    }
+    if (!freshStart && forceDrawStep && draft.step !== 'DRAW') {
+      saveDraft({ step: 'DRAW' });
+    }
     setValidationMessage(draft.didValidationMessage ?? '');
     context.fillStyle = draft.backgroundColor || '#ffffff';
     context.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
@@ -52,7 +69,7 @@ export function DrawingCanvas({ freshStart = false }: { freshStart?: boolean }) 
       image.onload = () => context.drawImage(image, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
       image.src = draft.originalDataUrl;
     }
-  }, [freshStart, router]);
+  }, [forceDrawStep, freshStart, resumeDraft, router]);
 
   function getContext() {
     const context = canvasRef.current?.getContext('2d', { willReadFrequently: true });
@@ -158,7 +175,7 @@ export function DrawingCanvas({ freshStart = false }: { freshStart?: boolean }) 
     const imageData = context.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
     const accentColors = extractAccentColors(imageData, backgroundColor, 3);
     const draft = loadDraft();
-    const styleId = draft.styleId ?? pickRandomStyle().id;
+    const styleId = draft.styleId ?? DEFAULT_STYLE_ID;
     const isBlankCanvas = !hasVisibleCanvasContent(imageData, backgroundColor);
     const prompt = buildImagePrompt(styleId, accentColors, backgroundColor, { isBlankCanvas });
     const originalDataUrl = canvas.toDataURL('image/png');
@@ -225,12 +242,14 @@ export function DrawingCanvas({ freshStart = false }: { freshStart?: boolean }) 
     <section className="wizard-card">
       <div className="draw-area">
         <div className="canvas-panel">
-          <div className="tab-row">
-            <button className="tab-button active" type="button"><Brush size={18} /> {t('drawOnCanvas')}</button>
-            <label className="tab-button upload-tab"><Upload size={18} /> {t('uploadPhoto')}<input type="file" accept="image/*" onChange={uploadImage} /></label>
+          <div className="canvas-width-frame">
+            <div className="tab-row">
+              <button className="tab-button active" type="button"><Brush size={18} /> {t('drawOnCanvas')}</button>
+              <label className="tab-button upload-tab"><Upload size={18} /> {t('uploadPhoto')}<input type="file" accept="image/*" onChange={uploadImage} /></label>
+            </div>
+            {validationMessage ? <div className="inline-warning">{validationMessage}</div> : null}
           </div>
-          {validationMessage ? <div className="inline-warning">{validationMessage}</div> : null}
-          <div className="canvas-box real-canvas-box">
+          <div className="canvas-box real-canvas-box canvas-width-frame">
             <canvas
               ref={canvasRef}
               width={CANVAS_SIZE}
@@ -243,7 +262,7 @@ export function DrawingCanvas({ freshStart = false }: { freshStart?: boolean }) 
             />
             <GuideLayer />
           </div>
-          <div className="toolbox">
+          <div className="toolbox canvas-width-frame">
             <div>
               <b>{t('colors')}</b>
               <div className="swatches">
@@ -274,7 +293,7 @@ export function DrawingCanvas({ freshStart = false }: { freshStart?: boolean }) 
             <button className={`tool-mini icon-tool ${eraser ? 'active' : ''}`} type="button" onClick={() => setEraser((value) => !value)}><b>{t('eraser')}</b><Eraser /></button>
             <button className="tool-mini icon-tool" type="button" onClick={undo}><b>{t('undo')}</b><RotateCcw /></button>
           </div>
-          <div className="background-tools">
+          <div className="background-tools canvas-width-frame">
             <b>{t('background')}</b>
             <div className="bg-swatches">{backgrounds.map((item) => <button key={item} className={`bg-swatch ${item === backgroundColor ? 'active' : ''}`} style={{ background: item }} onClick={() => setBackground(item)} aria-label={`${t('setBackground')} ${item}`} />)}</div>
           </div>

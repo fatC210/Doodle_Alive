@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import { useEffect, useRef, useState } from 'react';
 import { Check, Eye, LockKeyhole, RotateCcw, Shield } from 'lucide-react';
-import { apiKeys, defaultSettings } from '@/lib/data';
+import { apiKeys, defaultSettings, elevenBuiltInModels } from '@/lib/data';
 import { testImageProviderResponse } from '@/lib/image-gen';
 import { useLanguage } from '@/lib/i18n';
 import { loadCustomImageKey, loadCustomLlmKey, loadKeyStatuses, loadSecretKeys, saveCustomImageKey, saveCustomLlmKey, saveKeyStatus, saveSecretKeys } from '@/lib/secrets';
@@ -11,6 +11,7 @@ import { validateApiKey } from '@/lib/settings-validation';
 import { loadSettings, saveSettings } from '@/lib/storage';
 import { useTheme } from '@/lib/theme';
 import type { AdvancedSettings, ApiConnectionTestResult, ApiKeyName, ApiKeyStatus, SecretKeys } from '@/lib/types';
+import { SystemSelect } from '@/components/SystemSelect';
 
 const IMAGE_PROVIDER_TEST_PROMPT = 'A simple smiling star character, flat color icon on a white background.';
 
@@ -41,6 +42,10 @@ type ApiKeyCardProps = {
 type ImageProviderStatus = {
   status: ApiKeyStatus;
   testedAt?: string;
+};
+
+type CustomLlmConfig = Pick<AdvancedSettings, 'customLlmEndpoint' | 'customLlmModel'> & {
+  customLlmKey: string;
 };
 
 const apiKeyLogos: Record<ApiKeyName, { src: string; width: number; height: number }> = {
@@ -153,18 +158,23 @@ export function AdvancedSettingsForm() {
   const { theme, setTheme } = useTheme();
   const [settings, setSettings] = useState<AdvancedSettings>(defaultSettings);
   const [customLlmKey, setCustomLlmKey] = useState('');
+  const [customLlmStatus, setCustomLlmStatus] = useState<ImageProviderStatus>({ status: 'missing' });
   const [customImageKey, setCustomImageKey] = useState('');
   const [imageProviderStatus, setImageProviderStatus] = useState<ImageProviderStatus>({ status: 'missing' });
+  const [testingCustomLlm, setTestingCustomLlm] = useState(false);
   const [testingImageProvider, setTestingImageProvider] = useState(false);
+  const customLlmTestRunRef = useRef(0);
   const imageProviderTestRunRef = useRef(0);
 
   useEffect(() => {
     async function load() {
       const loadedSettings = loadSettings();
       const loadedCustomImageKey = await loadCustomImageKey();
+      const loadedCustomLlmKey = await loadCustomLlmKey();
       setSettings(loadedSettings);
-      setCustomLlmKey(await loadCustomLlmKey());
+      setCustomLlmKey(loadedCustomLlmKey);
       setCustomImageKey(loadedCustomImageKey);
+      setCustomLlmStatus({ status: hasCompleteCustomLlmConfig(loadedSettings, loadedCustomLlmKey) ? 'untested' : 'missing' });
       setImageProviderStatus({ status: hasCompleteImageProviderConfig(loadedSettings, loadedCustomImageKey) ? 'untested' : 'missing' });
     }
     load();
@@ -178,10 +188,20 @@ export function AdvancedSettingsForm() {
     saveSettings({ [key]: value } as Partial<AdvancedSettings>);
   }
 
+  function updateCustomLlmSetting<K extends 'customLlmEndpoint' | 'customLlmModel'>(key: K, value: AdvancedSettings[K]) {
+    const nextSettings = { ...settings, [key]: value };
+    setSettings(nextSettings);
+    setCustomLlmStatus({ status: hasCompleteCustomLlmConfig(nextSettings, customLlmKey) ? 'untested' : 'missing' });
+  }
+
+  function updateCustomLlmKey(value: string) {
+    setCustomLlmKey(value);
+    setCustomLlmStatus({ status: hasCompleteCustomLlmConfig(settings, value) ? 'untested' : 'missing' });
+  }
+
   function updateCustomImageSetting<K extends 'customImageEndpoint' | 'customImageModel'>(key: K, value: AdvancedSettings[K]) {
     const nextSettings = { ...settings, [key]: value };
     setSettings(nextSettings);
-    saveSettings({ [key]: value } as Partial<AdvancedSettings>);
     setImageProviderStatus({ status: hasCompleteImageProviderConfig(nextSettings, customImageKey) ? 'untested' : 'missing' });
   }
 
@@ -190,8 +210,47 @@ export function AdvancedSettingsForm() {
     setImageProviderStatus({ status: hasCompleteImageProviderConfig(settings, value) ? 'untested' : 'missing' });
   }
 
-  async function saveCustomLlmKeyOnBlur(value: string) {
-    await saveCustomLlmKey(value);
+  async function saveAndValidateCustomLlmProvider(next?: Partial<Pick<AdvancedSettings, 'customLlmEndpoint' | 'customLlmModel'>> & { customLlmKey?: string }) {
+    const nextSettings = {
+      ...settings,
+      llmSource: 'custom' as const,
+      customLlmEndpoint: next?.customLlmEndpoint ?? settings.customLlmEndpoint,
+      customLlmModel: next?.customLlmModel ?? settings.customLlmModel,
+    };
+    const nextCustomLlmKey = next?.customLlmKey ?? customLlmKey;
+    const runId = customLlmTestRunRef.current + 1;
+    customLlmTestRunRef.current = runId;
+
+    setSettings(nextSettings);
+    setCustomLlmKey(nextCustomLlmKey);
+    saveSettings({
+      llmSource: nextSettings.llmSource,
+      customLlmEndpoint: nextSettings.customLlmEndpoint,
+      customLlmModel: nextSettings.customLlmModel,
+    });
+    await saveCustomLlmKey(nextCustomLlmKey);
+
+    if (!hasCompleteCustomLlmConfig(nextSettings, nextCustomLlmKey)) {
+      setCustomLlmStatus({ status: 'missing' });
+      return;
+    }
+
+    setTestingCustomLlm(true);
+    setCustomLlmStatus({ status: 'untested' });
+
+    try {
+      const valid = await testCustomLlmResponse({
+        customLlmEndpoint: nextSettings.customLlmEndpoint,
+        customLlmModel: nextSettings.customLlmModel,
+        customLlmKey: nextCustomLlmKey,
+      });
+      if (customLlmTestRunRef.current !== runId) return;
+      setCustomLlmStatus({ status: valid ? 'valid' : 'invalid', testedAt: new Date().toISOString() });
+    } finally {
+      if (customLlmTestRunRef.current === runId) {
+        setTestingCustomLlm(false);
+      }
+    }
   }
 
   async function saveAndValidateCustomImageProvider(next?: Partial<Pick<AdvancedSettings, 'customImageEndpoint' | 'customImageModel'>> & { customImageKey?: string }) {
@@ -245,7 +304,10 @@ export function AdvancedSettingsForm() {
     void saveCustomImageKey('');
     saveSettings(defaultSettings);
     setImageProviderStatus({ status: 'missing' });
+    setCustomLlmStatus({ status: 'missing' });
     setTestingImageProvider(false);
+    setTestingCustomLlm(false);
+    customLlmTestRunRef.current += 1;
     imageProviderTestRunRef.current += 1;
     setLanguage(defaultSettings.language);
     setTheme('light');
@@ -280,33 +342,52 @@ export function AdvancedSettingsForm() {
                     {t('customLlmModel')}
                     <input
                       value={settings.customLlmModel}
-                      onChange={(event) => update('customLlmModel', event.target.value)}
+                      onChange={(event) => updateCustomLlmSetting('customLlmModel', event.target.value)}
                       placeholder={t('customLlmModelPlaceholder')}
                     />
                   </label>
                 ) : (
-                  <label className="form-field">
-                    {t('builtInModel')}
-                    <select value={settings.builtInModel} onChange={(event) => update('builtInModel', event.target.value)}>
-                      <option>gpt-4o-mini</option>
-                      <option>gpt-4o</option>
-                      <option>claude-sonnet-4</option>
-                      <option>gemini-2.5-flash</option>
-                    </select>
-                  </label>
+                  <div className="form-field">
+                    <span>{t('builtInModel')}</span>
+                    <SystemSelect
+                      value={settings.builtInModel}
+                      onChange={(nextValue) => update('builtInModel', nextValue)}
+                      ariaLabel={t('builtInModel')}
+                      options={elevenBuiltInModels.map((model) => ({
+                        value: model.id,
+                        label: `${model.provider} · ${model.label}`,
+                      }))}
+                    />
+                  </div>
                 )}
               </div>
             </div>
             {settings.llmSource === 'custom' ? (
-              <div className="config-grid">
-                <label className="form-field">
-                  {t('customLlmKey')}
-                  <input value={customLlmKey} onChange={(event) => setCustomLlmKey(event.target.value)} onBlur={(event) => void saveCustomLlmKeyOnBlur(event.target.value)} placeholder="sk-••••••••••••••••••••" type="password" />
-                </label>
-                <label className="form-field">
-                  {t('customEndpoint')}
-                  <input value={settings.customLlmEndpoint} onChange={(event) => update('customLlmEndpoint', event.target.value)} placeholder={t('customLlmEndpointPlaceholder')} />
-                </label>
+              <div className="image-config-stack">
+                <div className="config-grid">
+                  <label className="form-field">
+                    {t('customLlmKey')}
+                    <input value={customLlmKey} onChange={(event) => updateCustomLlmKey(event.target.value)} placeholder="sk-••••••••••••••••••••" type="password" />
+                  </label>
+                  <label className="form-field">
+                    {t('customEndpoint')}
+                    <input value={settings.customLlmEndpoint} onChange={(event) => updateCustomLlmSetting('customLlmEndpoint', event.target.value)} placeholder={t('customLlmEndpointPlaceholder')} />
+                  </label>
+                </div>
+                <div className="provider-status-row">
+                  <span className={`test-meta ${customLlmStatus.status === 'valid' ? 'valid' : ''}`}>
+                    <span aria-hidden="true">●</span> {testingCustomLlm ? t('testing') : customLlmTestLabel(customLlmStatus, language, t)}
+                  </span>
+                  <span className={`status-badge ${customLlmStatus.status === 'valid' ? '' : 'missing'}`}>
+                    {testingCustomLlm ? t('testing') : statusLabel(customLlmStatus.status, t)}
+                    {customLlmStatus.status === 'valid' ? <Check size={14} /> : <span className="badge-mark">!</span>}
+                  </span>
+                </div>
+                <div className="save-row">
+                  <button className="primary-button" type="button" disabled={testingCustomLlm} onClick={() => void saveAndValidateCustomLlmProvider()}>
+                    {testingCustomLlm ? t('testing') : t('saveChanges')}
+                  </button>
+                </div>
               </div>
             ) : null}
           </div>
@@ -332,7 +413,6 @@ export function AdvancedSettingsForm() {
                   <input
                     value={settings.customImageEndpoint}
                     onChange={(event) => updateCustomImageSetting('customImageEndpoint', event.target.value)}
-                    onBlur={(event) => void saveAndValidateCustomImageProvider({ customImageEndpoint: event.target.value })}
                     placeholder={t('customImageEndpointPlaceholder')}
                   />
                 </label>
@@ -341,7 +421,6 @@ export function AdvancedSettingsForm() {
                   <input
                     value={customImageKey}
                     onChange={(event) => updateCustomImageKey(event.target.value)}
-                    onBlur={(event) => void saveAndValidateCustomImageProvider({ customImageKey: event.target.value })}
                     placeholder="sk-••••••••••••••••••••"
                     type="password"
                   />
@@ -353,10 +432,14 @@ export function AdvancedSettingsForm() {
                   <input
                     value={settings.customImageModel}
                     onChange={(event) => updateCustomImageSetting('customImageModel', event.target.value)}
-                    onBlur={(event) => void saveAndValidateCustomImageProvider({ customImageModel: event.target.value })}
                     placeholder={t('imageModelPlaceholder')}
                   />
                 </label>
+              </div>
+              <div className="save-row">
+                <button className="primary-button" type="button" disabled={testingImageProvider} onClick={() => void saveAndValidateCustomImageProvider()}>
+                  {testingImageProvider ? t('testing') : t('saveChanges')}
+                </button>
               </div>
             </div>
           </div>
@@ -395,6 +478,39 @@ function hasCompleteImageProviderConfig(settings: AdvancedSettings, customImageK
     && settings.customImageModel.trim()
     && customImageKey.trim(),
   );
+}
+
+function hasCompleteCustomLlmConfig(settings: AdvancedSettings, customLlmKey: string) {
+  return Boolean(
+    settings.customLlmEndpoint.trim()
+    && settings.customLlmModel.trim()
+    && customLlmKey.trim(),
+  );
+}
+
+async function testCustomLlmResponse(config: CustomLlmConfig) {
+  if (!config.customLlmEndpoint || !config.customLlmModel || !config.customLlmKey) return false;
+
+  try {
+    const response = await fetch(config.customLlmEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.customLlmKey}`,
+      },
+      body: JSON.stringify({
+        model: config.customLlmModel,
+        messages: [{ role: 'user', content: 'Reply with OK.' }],
+        max_tokens: 8,
+        temperature: 0,
+      }),
+    });
+    if (!response.ok) return false;
+    const data = await response.json().catch(() => null) as { choices?: Array<{ message?: { content?: string }; text?: string }> } | null;
+    return Boolean(data?.choices?.[0]?.message?.content || data?.choices?.[0]?.text);
+  } catch {
+    return false;
+  }
 }
 
 function ApiKeyCard({ row, value, visible, testing, language, t, onChange, onBlur, onToggleVisible, className = '' }: ApiKeyCardProps) {
@@ -454,6 +570,13 @@ function testedLabel(status: string, testedAt: string | undefined, language: 'en
 function imageProviderTestLabel(status: ImageProviderStatus, language: 'en' | 'zh', t: ReturnType<typeof useLanguage>['t']) {
   if ((status.status === 'valid' || status.status === 'invalid') && status.testedAt) return `${t('lastTested')} · ${formatRelativeTime(status.testedAt, language)}`;
   if (status.status === 'missing') return t('imageConfigMissing');
+  if (status.status === 'invalid') return t('invalid');
+  return t('notTested');
+}
+
+function customLlmTestLabel(status: ImageProviderStatus, language: 'en' | 'zh', t: ReturnType<typeof useLanguage>['t']) {
+  if ((status.status === 'valid' || status.status === 'invalid') && status.testedAt) return `${t('lastTested')} · ${formatRelativeTime(status.testedAt, language)}`;
+  if (status.status === 'missing') return t('customLlmConfigMissing');
   if (status.status === 'invalid') return t('invalid');
   return t('notTested');
 }

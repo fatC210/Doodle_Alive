@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, MessageCircle, Wand2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, MessageCircle, Trash2, Wand2 } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n';
-import { getCharacters } from '@/lib/storage';
+import { deleteCharacter, getCharacters } from '@/lib/storage';
 import type { DoodleCharacter } from '@/lib/types';
 import { CharacterAvatar } from './Illustrations';
 
@@ -12,8 +12,9 @@ const CHARACTERS_PER_PAGE = 5;
 
 export function HomeCharacters({ onCountChange }: { onCountChange?: (count: number) => void }) {
   const [characters, setCharacters] = useState<DoodleCharacter[] | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [page, setPage] = useState(0);
-  const { language, t } = useLanguage();
+  const { t } = useLanguage();
 
   useEffect(() => {
     getCharacters().then((items) => {
@@ -44,25 +45,41 @@ export function HomeCharacters({ onCountChange }: { onCountChange?: (count: numb
   const pageStart = page * CHARACTERS_PER_PAGE;
   const visibleCharacters = characters.slice(pageStart, pageStart + CHARACTERS_PER_PAGE);
 
+  async function handleDeleteCharacter(character: DoodleCharacter) {
+    if (!characters || deletingId) return;
+    const currentCharacters = characters;
+    if (!window.confirm(t('deleteCharacterConfirm'))) return;
+    setDeletingId(character.id);
+    try {
+      await deleteCharacter(character.id);
+      const nextCharacters = currentCharacters.filter((item) => item.id !== character.id);
+      setCharacters(nextCharacters);
+      setPage(Math.min(page, Math.max(0, Math.ceil(nextCharacters.length / CHARACTERS_PER_PAGE) - 1)));
+      onCountChange?.(nextCharacters.length);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
     <>
       <div className="character-grid">
         {visibleCharacters.map((character, index) => {
           const characterIndex = pageStart + index;
           return (
-            <article key={character.id} className={`character-card ${characterIndex === 0 ? 'featured' : ''}`}>
-              {characterIndex === 0 ? <span className="new-ribbon">✨ {t('newBadge')}</span> : null}
-              {character.generatedDataUrl ? <img className="stored-avatar" src={character.generatedDataUrl} alt={character.name} /> : <CharacterAvatar tone={character.tone || 'mint'} size="md" />}
+            <article key={character.id} className={`character-card gallery-character-card ${characterIndex === 0 ? 'featured' : ''}`}>
+              <div className="gallery-avatar-frame">
+                {character.generatedDataUrl ? <img className="stored-avatar gallery-avatar" src={character.generatedDataUrl} alt={character.name} /> : <CharacterAvatar tone={character.tone || 'mint'} size="lg" />}
+              </div>
               <div className="character-meta">
                 <h3>{character.name}</h3>
-                <div className="tag-row">
-                  <span className="tag">{character.styleName}</span>
-                  <span className={`tag ${characterIndex % 3 === 0 ? 'green' : characterIndex % 3 === 1 ? 'orange' : 'blue'}`}>{character.personaName}</span>
+                <div className="character-actions">
+                  <Link href={`/chat/${character.id}`} className="voice-chip character-chat-chip"><MessageCircle size={15} /> {t('continueChat')}</Link>
+                  <button className="icon-button character-delete-button" type="button" onClick={() => handleDeleteCharacter(character)} disabled={Boolean(deletingId)} aria-label={t('deleteCharacter')} title={t('deleteCharacter')}>
+                    <Trash2 size={17} />
+                  </button>
                 </div>
-                <div className="meta-date">{formatDate(character.createdAt, language, t)}</div>
-                <Link href={`/chat/${character.id}`} className="card-cta"><MessageCircle size={15} /> {t('continueChat')}</Link>
               </div>
-              <span className="card-menu">⋮</span>
             </article>
           );
         })}
@@ -86,14 +103,4 @@ export function HomeCharacters({ onCountChange }: { onCountChange?: (count: numb
       ) : null}
     </>
   );
-}
-
-function formatDate(value: string, language: 'en' | 'zh', t: ReturnType<typeof useLanguage>['t']) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return t('createdRecently');
-  const today = new Date();
-  if (date.toDateString() === today.toDateString()) {
-    return `${t('createdToday')} · ${date.toLocaleTimeString(language === 'zh' ? 'zh-CN' : undefined, { hour: '2-digit', minute: '2-digit' })}`;
-  }
-  return `${t('created')} ${date.toLocaleDateString(language === 'zh' ? 'zh-CN' : undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
 }
