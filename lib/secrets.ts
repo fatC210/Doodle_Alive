@@ -1,34 +1,11 @@
 'use client';
 
 import { decryptSecret, encryptSecret, getStoredItem, loadSettings, removeStoredItem, saveSettings, setStoredItem } from './storage';
-import type { ApiConnectionTestResult, ApiKeyName, SecretKeys } from './types';
 
-const SECRET_STORAGE_KEYS: Record<ApiKeyName, string> = {
-  elevenLabs: 'doodle-key-elevenlabs',
-  did: 'doodle-key-did',
-};
-
-const STATUS_KEY = 'doodle-key-statuses';
 const CUSTOM_LLM_KEY = 'doodle-key-custom-llm';
 const CUSTOM_IMAGE_KEY = 'doodle-key-custom-image';
+const DID_API_KEY = 'doodle-key-did-api';
 const LEGACY_IMAGE_KEY = 'doodle-key-image';
-
-export async function loadSecretKeys(): Promise<SecretKeys> {
-  return {
-    elevenLabs: await decryptSecret(getStoredItem(SECRET_STORAGE_KEYS.elevenLabs) || ''),
-    did: await decryptSecret(getStoredItem(SECRET_STORAGE_KEYS.did) || ''),
-  };
-}
-
-export async function saveSecretKeys(keys: Partial<SecretKeys>) {
-  await Promise.all(
-    (Object.entries(keys) as Array<[ApiKeyName, string | undefined]>).map(async ([name, value]) => {
-      if (value == null) return;
-      if (value) setStoredItem(SECRET_STORAGE_KEYS[name], await encryptSecret(value));
-      else removeStoredItem(SECRET_STORAGE_KEYS[name]);
-    }),
-  );
-}
 
 export async function loadCustomLlmKey() {
   return decryptSecret(getStoredItem(CUSTOM_LLM_KEY) || '');
@@ -70,27 +47,13 @@ export async function saveCustomImageKey(value: string) {
   clearLegacyImageSettings(loadSettings() as ReturnType<typeof loadSettings> & { imageApiKey?: string });
 }
 
-export function loadKeyStatuses(): Partial<Record<ApiKeyName, ApiConnectionTestResult>> {
-  if (typeof window === 'undefined') return {};
-  try {
-    return JSON.parse(getStoredItem(STATUS_KEY) || '{}') as Partial<Record<ApiKeyName, ApiConnectionTestResult>>;
-  } catch {
-    return {};
-  }
+export async function loadDidApiKey() {
+  return decryptSecret(getStoredItem(DID_API_KEY) || '');
 }
 
-export function saveKeyStatus(result: ApiConnectionTestResult) {
-  if (typeof window === 'undefined') return;
-  const statuses = loadKeyStatuses();
-  statuses[result.key] = result;
-  setStoredItem(STATUS_KEY, JSON.stringify(statuses));
-}
-
-export function missingRequiredKeys(keys: SecretKeys) {
-  return {
-    elevenLabs: !keys.elevenLabs,
-    did: !keys.did,
-  };
+export async function saveDidApiKey(value: string) {
+  if (value) setStoredItem(DID_API_KEY, await encryptSecret(value));
+  else removeStoredItem(DID_API_KEY);
 }
 
 function clearLegacyImageSettings(settings: ReturnType<typeof loadSettings> & { imageApiKey?: string }) {

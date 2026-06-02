@@ -4,6 +4,55 @@ const DEFAULT_ACCENTS = ['#3d72e8', '#ff8d91', '#ffc35f'];
 const WHITE_DISTANCE = 42;
 const CONTENT_DISTANCE = 30;
 const MIN_CONTENT_PIXELS = 8;
+const STYLE_FIDELITY_PROMPTS: Record<string, string[]> = {
+  'american-academy': [
+    'authentic warm campus portrait photography',
+    'preppy academic outfit details',
+    'natural daylight and realistic camera depth',
+  ],
+  'soft-studio': [
+    'realistic studio headshot photography',
+    'soft diffused key light',
+    'black turtleneck sweater',
+    'light gray background',
+    'clean neutral portrait retouching',
+  ],
+  'pixar-3d': [
+    'polished 3D animated movie character render',
+    'rounded appealing shapes and expressive brows',
+    'soft subsurface-style skin and cinematic rim light',
+  ],
+  anime: [
+    'high quality Japanese anime portrait illustration',
+    'clean ink line art and cel shaded color blocks',
+    'large detailed eyes with crisp highlights',
+  ],
+  'western-comic': [
+    'American superhero comic book cover portrait',
+    'thick black ink outlines and bold graphic shadows',
+    'visible halftone dot shading and saturated print colors',
+  ],
+  watercolor: [
+    'delicate watercolor portrait on textured paper',
+    'transparent pigment washes and soft bleeding edges',
+    'pastel color palette with gentle handmade brush texture',
+  ],
+  cyberpunk: [
+    'cinematic cyberpunk character portrait illustration',
+    'neon magenta cyan edge lights and glossy techwear',
+    'futuristic city glow reflected in the face',
+  ],
+  'fantasy-medieval': [
+    'fantasy medieval character portrait illustration',
+    'ornate costume details and subtle magical glow',
+    'storybook royal lighting with painterly realism',
+  ],
+  'chibi-kawaii': [
+    'cute chibi character illustration',
+    'super deformed big head and tiny body proportions',
+    'rounded soft shapes with toy-like warm colors',
+  ],
+};
 const GUIDE_COLORS = [
   [165, 176, 205],
   [190, 199, 220],
@@ -65,29 +114,22 @@ export function buildImagePrompt(styleId: string, accentColors: string[], backgr
   void backgroundColor;
   const style = styles.find((item) => item.id === styleId) ?? styles.find((item) => item.id === DEFAULT_STYLE_ID) ?? styles[0];
   const colorText = accentColors.length ? accentColors.join(', ') : DEFAULT_ACCENTS.join(', ');
+  const styleFidelityPrompts = STYLE_FIDELITY_PROMPTS[style.id] ?? [];
   const subject = options.isBlankCanvas
-    ? 'random friendly real human face, unique wholesome person, original facial features, warm approachable expression'
-    : 'transform the provided original image into a real human face portrait, preserve the original image colors, shapes, mood, and character idea';
+    ? `create a real human frontal face portrait in ${style.name} style, unique person, original facial features`
+    : `transform the provided original image into a real human frontal face portrait in ${style.name} style, preserve the original image colors, shapes, mood, and character idea`;
   return [
     style.prompt,
-    'use the selected style as visual direction while keeping a photorealistic human face',
+    ...styleFidelityPrompts,
+    `convert the image into a real human frontal face portrait in ${style.name} style`,
     'D-ID compatible real person portrait',
-    'one single human subject',
-    'frontal facing portrait',
+    'clear detectable human facial landmarks',
     'head and shoulders upper body',
     'natural realistic skin texture',
     'real human facial proportions',
-    'neutral expression',
-    'closed mouth',
-    'open eyes',
-    'both eyes clearly visible',
-    'solid clean white background',
     subject,
     `wearing ${colorText} colored clothes and accessories`,
-    'kid-friendly friendly person portrait',
     'clear recognizable face',
-    'soft safe lighting',
-    'not a cartoon avatar',
     'not an animal or object character',
     'no masks or face coverings',
     'no scary details',
@@ -97,7 +139,7 @@ export function buildImagePrompt(styleId: string, accentColors: string[], backgr
 }
 
 export function negativePrompt() {
-  return 'violence, weapon, horror, scary, blood, gore, adult content, open mouth, closed eyes, side profile, cropped face, blurry, extra limbs, text, watermark, non-human face, animal face, mask, covered face, flat cartoon avatar';
+  return 'violence, weapon, horror, scary, blood, gore, adult content, cropped face, blurry, extra limbs, text, watermark, non-human face, animal face, mask, covered face, wrong art style, style mismatch';
 }
 
 function isNearWhite(r: number, g: number, b: number) {

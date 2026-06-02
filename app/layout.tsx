@@ -13,7 +13,7 @@ const roundedFont = Nunito({
 
 export const metadata: Metadata = {
   title: 'Doodle Alive',
-  description: 'Turn children doodles into talking AI characters.',
+  description: 'Turn children doodles into talking AI characters. 把孩子的涂鸦变成会说话的 AI 角色。',
   icons: {
     icon: [{ url: '/wechat-doodle-favicon-original-20260530.png', type: 'image/png', sizes: '64x64' }],
     shortcut: [{ url: '/wechat-doodle-favicon-original-20260530.png', type: 'image/png', sizes: '64x64' }],

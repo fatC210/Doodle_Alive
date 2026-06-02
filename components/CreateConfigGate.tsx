@@ -6,7 +6,7 @@ import { AlertTriangle, Settings } from 'lucide-react';
 import { ReactNode, useEffect, useState } from 'react';
 import { getMorphingConfigIssues, type ConfigIssue } from '@/lib/config-requirements';
 import { useLanguage } from '@/lib/i18n';
-import { loadCustomImageKey, loadSecretKeys } from '@/lib/secrets';
+import { loadCustomImageKey } from '@/lib/secrets';
 import { loadSettings } from '@/lib/storage';
 
 const guardedPaths = new Set(['/create', '/create/style', '/create/morph']);
@@ -29,9 +29,8 @@ export function CreateConfigGate({ children }: { children: ReactNode }) {
     async function checkConfig() {
       try {
         const settings = loadSettings();
-        const keys = await loadSecretKeys();
         const imageKey = await loadCustomImageKey();
-        const issues = getMorphingConfigIssues(settings, keys, imageKey);
+        const issues = getMorphingConfigIssues(settings, imageKey);
         if (cancelled) return;
         setState(issues.length ? { path: pathname, status: 'blocked', issue: issues[0] } : { path: pathname, status: 'ready' });
       } catch {
@@ -67,6 +66,5 @@ export function CreateConfigGate({ children }: { children: ReactNode }) {
 }
 
 function createConfigMessage(issue: ConfigIssue, t: ReturnType<typeof useLanguage>['t']) {
-  if (issue === 'didKey') return t('didKeyMissing');
   return t('imageConfigMissing');
 }

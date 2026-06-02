@@ -21,7 +21,7 @@ export default function HomePage() {
             <Link className="primary-button" href="/create?new=1"><Sparkles size={20} /> {t('newCharacter')}</Link>
           </div>
         </div>
-        <div className="hero-art" role="img" aria-label="A doodle drawing coming alive through a colorful magic portal" />
+        <div className="hero-art" role="img" aria-label={t('heroArtAria')} />
       </section>
 
       <section className="my-characters">

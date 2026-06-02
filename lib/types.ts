@@ -5,7 +5,6 @@ export type LanguageCode = 'en' | 'zh';
 export type ImageProviderType = 'custom';
 
 export type ApiKeyStatus = 'valid' | 'missing' | 'invalid' | 'untested';
-export type ApiKeyName = 'elevenLabs' | 'did';
 export type ConnectionStatus = 'idle' | 'connecting' | 'ready' | 'listening' | 'thinking' | 'speaking' | 'reconnecting' | 'error' | 'text';
 
 export interface StylePreset {
@@ -13,6 +12,7 @@ export interface StylePreset {
   name: string;
   nameZh: string;
   desc: string;
+  descZh: string;
   prompt: string;
   tone: string;
   image: string;
@@ -23,10 +23,10 @@ export interface PersonaPreset {
   name: string;
   nameZh: string;
   desc: string;
+  descZh: string;
   systemPrompt: string;
   voice: string;
   voiceZh: string;
-  voiceId: string;
   icon: string;
   tone: string;
 }
@@ -47,14 +47,13 @@ export interface DoodleCharacter {
   generatedImageUrl?: string;
   accentColors: string[];
   prompt: string;
-  avatarId?: string;
-  avatarSourceUrl?: string;
-  didStreamId?: string;
-  agentId?: string;
-  voiceId?: string;
   personaPrompt?: string;
   randomPersonaId?: string;
   tone?: string;
+  didAgentId?: string;
+  didClientKey?: string;
+  didSourceUrl?: string;
+  didStatus?: string;
 }
 
 export interface ChatMessage {
@@ -75,11 +74,6 @@ export interface CreationDraft {
   styleChoiceMode?: 'manual' | 'random';
   characterName?: string;
   personaId?: string;
-  avatarId?: string;
-  avatarSourceUrl?: string;
-  didStreamId?: string;
-  didValidationStatus?: 'passed' | 'failed';
-  didValidationMessage?: string;
   accentColors: string[];
   prompt?: string;
   backgroundColor: string;
@@ -87,11 +81,6 @@ export interface CreationDraft {
 }
 
 export interface AdvancedSettings {
-  llmSource: 'built-in' | 'custom';
-  builtInModel: string;
-  customLlmModel: string;
-  customLlmKey: string;
-  customLlmEndpoint: string;
   imageProvider: ImageProviderType;
   customImageKey: string;
   customImageModel: string;
@@ -99,17 +88,6 @@ export interface AdvancedSettings {
   language: LanguageCode;
 }
 
-export interface SecretKeys {
-  elevenLabs: string;
-  did: string;
-}
-
-export interface ApiConnectionTestResult {
-  key: ApiKeyName;
-  status: ApiKeyStatus;
-  message: string;
-  testedAt: string;
-}
 
 export interface ImageGenerationRequest {
   prompt: string;
@@ -128,15 +106,6 @@ export interface ImageGenerationResult {
   warning?: string;
 }
 
-export interface DidAvatarResult {
-  ok: boolean;
-  avatarId?: string;
-  avatarSourceUrl?: string;
-  streamId?: string;
-  status: 'passed' | 'failed';
-  message: string;
-  recoverable: boolean;
-}
 
 export interface RealtimeConnectionState {
   live: ConnectionStatus;

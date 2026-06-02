@@ -5,13 +5,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, Compass, Dice5, Drama, FlaskConical, Glasses, HeartHandshake, LockKeyhole, Mic2, Palette, Sparkles, type LucideIcon } from 'lucide-react';
 import { generateRandomCharacterName } from '@/lib/character-name';
-import { getPersonaConfigIssues } from '@/lib/config-requirements';
 import { DEFAULT_STYLE_ID, personas, pickRandomPersona, styles } from '@/lib/data';
-import { createElevenAgent, buildAgentPrompt } from '@/lib/elevenlabs';
+import { provisionDidAgent } from '@/lib/did-agent-client';
 import { useLanguage } from '@/lib/i18n';
+import { loadDidApiKey } from '@/lib/secrets';
 import type { LanguageCode, PersonaPreset } from '@/lib/types';
-import { loadSecretKeys } from '@/lib/secrets';
-import { clearDraft, dataUrlToBlob, loadDraft, loadSettings, saveCharacter, saveDraft } from '@/lib/storage';
+import { clearDraft, dataUrlToBlob, loadDraft, saveCharacter, saveDraft } from '@/lib/storage';
 
 const personaIcons: Record<string, LucideIcon> = {
   'brave-explorer': Compass,
@@ -26,13 +25,19 @@ function getPersonaVoice(persona: PersonaPreset, language: LanguageCode) {
   return language === 'zh' ? persona.voiceZh : persona.voice;
 }
 
+function buildPersonaPrompt(persona: PersonaPreset, character: { name: string; styleName: string; prompt: string }) {
+  return `${persona.systemPrompt}
+Character name: ${character.name}
+Visual style: ${character.styleName}
+Drawing prompt: ${character.prompt}`;
+}
+
 export function PersonaSelector() {
   const router = useRouter();
   const { language, t } = useLanguage();
   const [selectedId, setSelectedId] = useState('random');
   const [saving, setSaving] = useState(false);
   const [agentMessage, setAgentMessage] = useState('');
-  const [needsElevenLabsKey, setNeedsElevenLabsKey] = useState(false);
   const [generatedDataUrl, setGeneratedDataUrl] = useState('');
   const [styleId, setStyleId] = useState(DEFAULT_STYLE_ID);
   const [characterName, setCharacterName] = useState('');
@@ -49,18 +54,8 @@ export function PersonaSelector() {
     });
   }, []);
 
-  useEffect(() => {
-    async function checkSetup() {
-      const keys = await loadSecretKeys();
-      const issues = getPersonaConfigIssues(keys);
-      setNeedsElevenLabsKey(Boolean(issues.length));
-    }
-    void checkSetup();
-  }, [t]);
-
   function choose(personaId: string) {
     setSelectedId(personaId);
-    setAgentMessage('');
     saveDraft({ step: 'PERSONA', personaId });
   }
 
@@ -78,13 +73,8 @@ export function PersonaSelector() {
       setCharacterName(finalCharacterName);
       saveDraft({ step: 'PERSONA', characterName: finalCharacterName });
     }
-    const keys = await loadSecretKeys();
-    if (getPersonaConfigIssues(keys).length) {
-      setNeedsElevenLabsKey(true);
-      return;
-    }
-    setNeedsElevenLabsKey(false);
     setSaving(true);
+    setAgentMessage('');
     try {
       const draft = loadDraft();
       const savedRandomPersona = draft.personaId && draft.personaId !== 'random'
@@ -95,18 +85,18 @@ export function PersonaSelector() {
       const id = `character-${Date.now()}`;
       const originalImage = draft.originalDataUrl ? await dataUrlToBlob(draft.originalDataUrl) : undefined;
       const generatedImage = draft.generatedDataUrl?.startsWith('data:') ? await dataUrlToBlob(draft.generatedDataUrl) : undefined;
-      const settings = loadSettings();
       const characterDetails = { name: finalCharacterName, styleName: selectedStyle.name, prompt: draft.prompt ?? '' };
-      const agent = await createElevenAgent({
-        apiKey: keys.elevenLabs,
-        persona,
-        character: characterDetails,
-        llmSource: settings.llmSource,
-        model: settings.builtInModel,
-        customLlmModel: settings.customLlmModel,
-        customLlmEndpoint: settings.customLlmEndpoint,
+      const personaPrompt = buildPersonaPrompt(persona, characterDetails);
+      const didApiKey = await loadDidApiKey();
+      const didAgent = await provisionDidAgent({
+        characterId: id,
+        characterName: finalCharacterName,
+        personaPrompt,
+        imageDataUrl: draft.generatedDataUrl?.startsWith('data:') ? draft.generatedDataUrl : undefined,
+        imageUrl: draft.generatedImageUrl,
+        apiKey: didApiKey,
+        allowedDomains: window.location.origin,
       });
-      const personaPrompt = buildAgentPrompt(persona, characterDetails);
       await saveCharacter({
         id,
         name: finalCharacterName,
@@ -123,24 +113,23 @@ export function PersonaSelector() {
         generatedImageUrl: draft.generatedImageUrl,
         accentColors: draft.accentColors,
         prompt: draft.prompt ?? '',
-        avatarId: draft.avatarId,
-        avatarSourceUrl: draft.avatarSourceUrl,
-        didStreamId: draft.didStreamId,
-        agentId: agent.agentId,
-        voiceId: persona.voiceId,
         personaPrompt,
         randomPersonaId: selected.id === 'random' ? persona.id : undefined,
         tone: selectedStyle.tone,
+        didAgentId: didAgent.agentId,
+        didClientKey: didAgent.clientKey,
+        didSourceUrl: didAgent.sourceUrl,
+        didStatus: didAgent.status,
       });
       clearDraft();
       router.push(`/chat/${id}`);
     } catch (error) {
-      setAgentMessage(error instanceof Error ? error.message : t('saveCharacterFailed'));
+      setAgentMessage(localizeDidAgentError(error, language, t));
       setSaving(false);
     }
   }
 
-  const setupIssue = needsElevenLabsKey ? t('elevenLabsKeyMissing') : '';
+  const setupIssue = '';
   const SelectedIcon = personaIcons[selected.id] ?? Dice5;
 
   return (
@@ -161,7 +150,7 @@ export function PersonaSelector() {
                   {persona.id === selected.id ? <span className="selected-check"><Check size={18} aria-hidden="true" /></span> : null}
                   <div className="persona-icon"><PersonaIcon size={58} strokeWidth={1.8} aria-hidden="true" /></div>
                   <h3>{language === 'zh' ? persona.nameZh : persona.name}</h3>
-                  <p>{persona.desc}</p>
+                  <p>{language === 'zh' ? persona.descZh : persona.desc}</p>
                   <span className="voice-chip"><Mic2 size={14} aria-hidden="true" /> {getPersonaVoice(persona, language)}</span>
                 </button>
               );
@@ -180,9 +169,17 @@ export function PersonaSelector() {
       <div className="bottom-nav">
         <Link className="outline-button" href="/create/morph">← {t('back')}</Link>
         {setupIssue ? <Link className="outline-button" href="/settings">{t('openSettings')}</Link> : null}
-        <button className={`primary-button ${saving || setupIssue ? 'disabled' : ''}`} type="button" onClick={startChat}><Sparkles size={18} /> {saving ? t('saving') : `${t('startChatting')} →`}</button>
+        <button className={`primary-button ${saving || setupIssue ? 'disabled' : ''}`} type="button" onClick={startChat}><Sparkles size={18} /> {saving ? t('creatingDidAvatar') : `${t('startChatting')} →`}</button>
       </div>
       <div className={setupIssue ? 'inline-warning' : 'info-bar'}>{setupIssue || <><LockKeyhole size={16} aria-hidden="true" /> {t('changeLater')}</>}</div>
     </>
   );
+}
+
+function localizeDidAgentError(error: unknown, language: LanguageCode, t: ReturnType<typeof useLanguage>['t']) {
+  const message = error instanceof Error ? error.message : '';
+  if (!message) return t('saveCharacterFailed');
+  if (language !== 'zh') return message;
+  if (/D-ID|DID_API_KEY|DID_ALLOWED_DOMAINS|server|agent|avatar|client key|source/i.test(message)) return t('didAgentCreationFailed');
+  return message;
 }

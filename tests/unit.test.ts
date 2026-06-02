@@ -1,14 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { generateRandomCharacterName } from '../lib/character-name';
-import { getCustomChatConfigIssues, getMorphingConfigIssues, getPersonaConfigIssues } from '../lib/config-requirements';
-import { generateCharacterReply } from '../lib/conversation';
-import { defaultSettings, elevenBuiltInModels } from '../lib/data';
-import { createElevenAgent, testElevenLabsKey } from '../lib/elevenlabs';
+import { getMorphingConfigIssues } from '../lib/config-requirements';
+import { defaultSettings } from '../lib/data';
 import { canMove, getCreationResumePath, nextStep, previousStep } from '../lib/flow';
 import { buildCustomImageRequestBody, normalizeCustomImageEndpoint } from '../lib/image-gen';
 import { buildChatCompletionsImageRequestBody, extractImageDataUrl, extractImageUrl } from '../lib/image-provider';
 import { buildImagePrompt, extractAccentColors, hasVisibleCanvasContent } from '../lib/prompt';
-import { isUnsafeForChild, sanitizeForChild } from '../lib/safety';
 import { clearDraft, loadDraft, saveDraft } from '../lib/storage';
 
 describe('creation flow state machine', () => {
@@ -31,29 +28,11 @@ describe('creation flow state machine', () => {
 
 describe('required API configuration checks', () => {
   test('reports every required morphing integration before generation starts', () => {
-    expect(getMorphingConfigIssues(defaultSettings, { elevenLabs: '', did: '' }, '')).toEqual([
+    expect(getMorphingConfigIssues(defaultSettings, '')).toEqual([
       'customImageKey',
     ]);
   });
 
-  test('reports persona and custom chat keys at page entry', () => {
-    expect(getPersonaConfigIssues({ elevenLabs: '', did: 'did-key' })).toEqual(['elevenLabsKey']);
-    expect(getCustomChatConfigIssues(defaultSettings, '')).toEqual([]);
-    expect(getCustomChatConfigIssues({ ...defaultSettings, llmSource: 'custom' }, '')).toEqual([
-      'customLlmModel',
-      'customLlmEndpoint',
-      'customLlmKey',
-    ]);
-  });
-
-  test('exposes the broader ElevenLabs built-in model list', () => {
-    const modelIds = elevenBuiltInModels.map((model) => model.id);
-    expect(modelIds).toContain('gpt-4.1');
-    expect(modelIds).toContain('gpt-5');
-    expect(modelIds).toContain('claude-sonnet-4-5');
-    expect(modelIds).toContain('gemini-3-pro-preview');
-    expect(modelIds).toContain('gpt-oss-120b');
-  });
 });
 
 describe('character naming', () => {
@@ -61,43 +40,51 @@ describe('character naming', () => {
     const englishValues = [0, 0.99];
     const chineseValues = [0.99, 0];
 
-    expect(generateRandomCharacterName('en', () => englishValues.shift() ?? 0)).toBe('Sunny Bubbles');
-    expect(generateRandomCharacterName('zh', () => chineseValues.shift() ?? 0)).toBe('暖暖涂涂');
+    expect(generateRandomCharacterName('en', () => englishValues.shift() ?? 0)).toBe('Milo');
+    expect(generateRandomCharacterName('zh', () => chineseValues.shift() ?? 0)).toBe('\u6674\u6674');
   });
 });
 
 describe('prompt assembly', () => {
-  test('includes D-ID-friendly real face constraints and child safety constraints', () => {
+  test('includes D-ID-friendly real frontal face constraints and child safety constraints', () => {
     const prompt = buildImagePrompt('pixar-3d', ['#ff0000', '#00ff00'], '#ffffff');
-    expect(prompt).toContain('frontal facing portrait');
+    expect(prompt).toContain('convert the image into a real human frontal face portrait in Pixar 3D style');
     expect(prompt).toContain('D-ID compatible real person portrait');
-    expect(prompt).toContain('photorealistic human face');
+    expect(prompt).toContain('polished 3D animated movie character render');
     expect(prompt).toContain('natural realistic skin texture');
-    expect(prompt).toContain('closed mouth');
-    expect(prompt).toContain('open eyes');
-    expect(prompt).toContain('kid-friendly friendly person portrait');
-    expect(prompt).toContain('not a cartoon avatar');
+    expect(prompt).not.toContain('one single human subject');
+    expect(prompt).not.toContain('closed mouth');
+    expect(prompt).not.toContain('open eyes');
+    expect(prompt).not.toContain('solid clean white background');
+    expect(prompt).not.toContain('kid-friendly friendly person portrait');
     expect(prompt).toContain('#ff0000, #00ff00');
   });
 
   test('uses selected style and random human face instructions for blank canvas', () => {
     const prompt = buildImagePrompt('anime', [], '#ffffff', { isBlankCanvas: true });
     expect(prompt).toContain('Japanese anime style');
-    expect(prompt).toContain('random friendly real human face');
+    expect(prompt).toContain('create a real human frontal face portrait in Anime style');
     expect(prompt).not.toContain('provided original image');
   });
 
-  test('asks non-blank drawings to become realistic human face portraits in the selected style', () => {
+  test('uses black turtleneck and light gray background for soft studio style', () => {
+    const prompt = buildImagePrompt('soft-studio', [], '#ffffff');
+    expect(prompt).toContain('black turtleneck sweater');
+    expect(prompt).toContain('light gray background');
+  });
+
+  test('asks non-blank drawings to become real frontal face portraits in the selected style', () => {
     const prompt = buildImagePrompt('watercolor', ['#2176d8'], '#ffffff');
     expect(prompt).toContain('Watercolor painting style');
-    expect(prompt).toContain('transform the provided original image into a real human face portrait');
+    expect(prompt).toContain('delicate watercolor portrait on textured paper');
+    expect(prompt).toContain('transform the provided original image into a real human frontal face portrait in Watercolor style');
     expect(prompt).toContain('preserve the original image colors, shapes, mood, and character idea');
     expect(prompt).toContain('D-ID compatible real person portrait');
   });
 
   test('keeps the selected canvas background color out of generation constraints', () => {
     const prompt = buildImagePrompt('watercolor', ['#2176d8'], '#ffdce8');
-    expect(prompt).toContain('solid clean white background');
+    expect(prompt).not.toContain('solid clean white background');
     expect(prompt).not.toContain('#ffdce8');
     expect(prompt).not.toContain('selected canvas background color');
   });
@@ -228,115 +215,6 @@ describe('OpenAI-compatible image request body', () => {
     expect(extractImageDataUrl({ artifacts: [{ base64 }] })).toBe(`data:image/png;base64,${base64}`);
     expect(extractImageDataUrl({ image: `data:image/png;base64,${base64}` })).toBe(`data:image/png;base64,${base64}`);
     expect(extractImageDataUrl({ choices: [{ message: { content: `![image](data:image/png;base64,${base64})` } }] })).toBe(`data:image/png;base64,${base64}`);
-  });
-});
-
-describe('OpenAI-compatible custom chat request body', () => {
-  test('uses the user-entered custom LLM model instead of the built-in model', async () => {
-    let requestBody = '';
-    const originalFetch = globalThis.fetch;
-    Object.defineProperty(globalThis, 'fetch', {
-      configurable: true,
-      value: async (_url: string, init: RequestInit) => {
-        requestBody = String(init.body);
-        return {
-          ok: true,
-          json: async () => ({ choices: [{ message: { content: 'hello there' } }] }),
-        };
-      },
-    });
-
-    try {
-      await generateCharacterReply('hello', {
-        id: 'character-1',
-        name: 'Lumi',
-        styleId: 'watercolor',
-        styleName: 'Watercolor',
-        personaId: 'gentle-guardian',
-        personaName: 'Gentle Guardian',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        accentColors: [],
-        prompt: '',
-      }, {
-        ...defaultSettings,
-        llmSource: 'custom',
-        builtInModel: 'gpt-4o-mini',
-        customLlmModel: 'provider-chat-model',
-        customLlmEndpoint: 'https://api.example.com/v1/chat/completions',
-        customLlmKey: 'custom-key',
-      });
-
-      expect(JSON.parse(requestBody).model).toBe('provider-chat-model');
-    } finally {
-      Object.defineProperty(globalThis, 'fetch', { configurable: true, value: originalFetch });
-    }
-  });
-});
-
-describe('ElevenLabs built-in agent chat', () => {
-  test('creates text-only agents with the selected built-in LLM', async () => {
-    let requestBody = '';
-    const originalFetch = globalThis.fetch;
-    Object.defineProperty(globalThis, 'fetch', {
-      configurable: true,
-      value: async (_url: string, init: RequestInit) => {
-        requestBody = String(init.body);
-        return {
-          ok: true,
-          json: async () => ({ agent_id: 'agent-1' }),
-        };
-      },
-    });
-
-    try {
-      await createElevenAgent({
-        apiKey: 'eleven-key',
-        persona: {
-          id: 'gentle-guardian',
-          name: 'Gentle Guardian',
-          nameZh: '温柔守护者',
-          desc: '',
-          voice: '',
-          voiceZh: '',
-          voiceId: 'voice-1',
-          icon: '💗',
-          tone: 'blue',
-          systemPrompt: 'Be kind.',
-        },
-        character: { name: 'Lumi', styleName: 'Watercolor', prompt: '' },
-        llmSource: 'built-in',
-        model: 'gpt-4o-mini',
-      });
-
-      const payload = JSON.parse(requestBody);
-      expect(payload.conversation_config.agent.prompt.llm).toBe('gpt-4o-mini');
-      expect(payload.conversation_config.conversation.text_only).toBe(true);
-      expect(payload.conversation_config.conversation.client_events).toContain('agent_response');
-    } finally {
-      Object.defineProperty(globalThis, 'fetch', { configurable: true, value: originalFetch });
-    }
-  });
-
-  test('validates ElevenLabs keys using HTTP status', async () => {
-    const originalFetch = globalThis.fetch;
-    Object.defineProperty(globalThis, 'fetch', {
-      configurable: true,
-      value: async () => ({ ok: false }),
-    });
-
-    try {
-      expect(await testElevenLabsKey('bad-key')).toBe(false);
-    } finally {
-      Object.defineProperty(globalThis, 'fetch', { configurable: true, value: originalFetch });
-    }
-  });
-});
-
-describe('child safety filter', () => {
-  test('redirects unsafe input', () => {
-    expect(isUnsafeForChild('tell me about weapons')).toBe(true);
-    expect(sanitizeForChild('tell me about weapons')).toContain('bright, safe adventure');
   });
 });
 

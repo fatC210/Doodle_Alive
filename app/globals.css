@@ -681,10 +681,10 @@ main { position: relative; z-index: 1; }
 .morph-step-list::before {
   content: '';
   position: absolute;
-  left: 20px;
-  top: 24px;
-  bottom: 24px;
-  width: 4px;
+  left: 21px;
+  top: 22px;
+  bottom: 22px;
+  width: 2px;
   border-radius: 999px;
   background: linear-gradient(180deg, #7c3cff, #9b6cff, #7c3cff);
 }
@@ -727,7 +727,8 @@ main { position: relative; z-index: 1; }
 .morph-step-item.needs-retry .morph-step-copy small { color: var(--danger); }
 .morph-step-item.waiting .morph-step-icon {
   color: var(--muted);
-  background: rgba(124,60,255,.09);
+  background: var(--card-strong);
+  border: 1px solid rgba(124,60,255,.16);
   box-shadow: none;
 }
 .morph-step-item.needs-retry .morph-step-icon { background: var(--danger); }
@@ -735,7 +736,10 @@ main { position: relative; z-index: 1; }
   color: var(--green);
   opacity: 1;
 }
-.morph-step-item.working .morph-step-check { color: var(--blue); animation: spinGlow 1.1s linear infinite; }
+.morph-step-loader {
+  color: var(--blue);
+  animation: spinFull 1s linear infinite;
+}
 .morph-step-item.waiting .morph-step-check { color: var(--muted); opacity: .35; }
 .morph-step-item.needs-retry .morph-step-check { color: var(--danger); }
 .morph-side-panel {
@@ -1495,6 +1499,7 @@ main { position: relative; z-index: 1; }
 
 @keyframes floaty { 0%,100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-14px) rotate(8deg); } }
 @keyframes spinGlow { to { transform: rotate(352deg); } }
+@keyframes spinFull { to { transform: rotate(360deg); } }
 @keyframes pulseWave { 0%,100% { transform: scaleY(.42); opacity: .45; } 50% { transform: scaleY(1); opacity: 1; } }
 @keyframes loadingSweep { 0% { transform: translateX(-120%); } 48%, 100% { transform: translateX(120%); } }
 @keyframes scanImage { 0%, 100% { transform: translateY(-72%); opacity: .2; } 50% { transform: translateY(72%); opacity: 1; } }

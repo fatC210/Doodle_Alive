@@ -59,7 +59,7 @@ export function DrawingCanvas({ freshStart = false, forceDrawStep = false, resum
     if (!freshStart && forceDrawStep && draft.step !== 'DRAW') {
       saveDraft({ step: 'DRAW' });
     }
-    setValidationMessage(draft.didValidationMessage ?? '');
+    setValidationMessage('');
     context.fillStyle = draft.backgroundColor || '#ffffff';
     context.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
     setBackgroundColor(draft.backgroundColor || '#ffffff');
@@ -73,7 +73,7 @@ export function DrawingCanvas({ freshStart = false, forceDrawStep = false, resum
 
   function getContext() {
     const context = canvasRef.current?.getContext('2d', { willReadFrequently: true });
-    if (!context) throw new Error('Canvas is unavailable.');
+    if (!context) throw new Error(t('canvasUnavailable'));
     return context;
   }
 
@@ -179,7 +179,7 @@ export function DrawingCanvas({ freshStart = false, forceDrawStep = false, resum
     const isBlankCanvas = !hasVisibleCanvasContent(imageData, backgroundColor);
     const prompt = buildImagePrompt(styleId, accentColors, backgroundColor, { isBlankCanvas });
     const originalDataUrl = canvas.toDataURL('image/png');
-    saveDraft({ step: 'STYLE', originalDataUrl, accentColors, prompt, backgroundColor, styleId, isBlankCanvas, didValidationMessage: undefined, didValidationStatus: undefined });
+    saveDraft({ step: 'STYLE', originalDataUrl, accentColors, prompt, backgroundColor, styleId, isBlankCanvas });
     router.push('/create/style');
   }
 

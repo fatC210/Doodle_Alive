@@ -2,12 +2,11 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { Check, CircleCheck, Image as ImageIcon, Info, Palette, RefreshCw, Smile, Sparkles, Trash2 } from 'lucide-react';
+import { Check, CircleCheck, Image as ImageIcon, Info, LoaderCircle, Palette, RefreshCw, Smile, Sparkles, Trash2 } from 'lucide-react';
 import { getMorphingConfigIssues, type ConfigIssue } from '@/lib/config-requirements';
 import { useLanguage } from '@/lib/i18n';
 import { generateCharacterImage } from '@/lib/image-gen';
-import { loadCustomImageKey, loadSecretKeys } from '@/lib/secrets';
-import { validateDidAvatarForGeneratedImage } from '@/lib/settings-validation';
+import { loadCustomImageKey } from '@/lib/secrets';
 import { dataUrlToBlob, loadDraft, loadSettings, saveDraft } from '@/lib/storage';
 import { DoodleDrawing } from './Illustrations';
 
@@ -16,8 +15,9 @@ const GENERATE_STEP_INDEX = 2;
 const FALLBACK_ACCENT_COLORS = ['#3867e8', '#a675df', '#ff8a8a', '#ffc060', '#9bc8f5'];
 
 export function MorphingExperience() {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const tRef = useRef(t);
+  const languageRef = useRef(language);
   const [originalDataUrl, setOriginalDataUrl] = useState('');
   const [generatedDataUrl, setGeneratedDataUrl] = useState('');
   const [accentColors, setAccentColors] = useState<string[]>(FALLBACK_ACCENT_COLORS);
@@ -30,7 +30,8 @@ export function MorphingExperience() {
 
   useEffect(() => {
     tRef.current = t;
-  }, [t]);
+    languageRef.current = language;
+  }, [language, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,11 +47,10 @@ export function MorphingExperience() {
       setWorking(true);
       setActiveMorphStep(0);
       const settings = loadSettings();
-      const keys = await loadSecretKeys();
       const imageKey = await loadCustomImageKey();
       try {
         setConfigIssue('');
-        const configIssues = getMorphingConfigIssues(settings, keys, imageKey);
+        const configIssues = getMorphingConfigIssues(settings, imageKey);
         if (configIssues.length) {
           const firstIssue = configIssues[0];
           setConfigIssue(firstIssue);
@@ -79,8 +79,6 @@ export function MorphingExperience() {
                 step: 'PERSONA',
                 generatedDataUrl: previewUrl,
                 generatedImageUrl: result.imageUrl || previewUrl,
-                didValidationStatus: undefined,
-                didValidationMessage: undefined,
               });
               setStatusMessage(tx('avatarGenerated'));
               if (dataUrl && result.imageUrl && !result.blob) {
@@ -90,40 +88,6 @@ export function MorphingExperience() {
             }
           }
 
-          if (index === MORPH_STEP_COUNT - 1 && keys.did && (loadDraft().generatedImageUrl || loadDraft().generatedDataUrl)) {
-            setStatusMessage(tx('checkingDid'));
-            const currentDraft = loadDraft();
-            const didResult = await validateDidAvatarForGeneratedImage({
-              didKey: keys.did,
-              imageProvider: settings.imageProvider,
-              generatedImageUrl: currentDraft.generatedImageUrl,
-              generatedImageDataUrl: currentDraft.generatedDataUrl,
-            });
-            if (cancelled) return;
-            if (!didResult.ok) {
-              saveDraft({
-                step: 'PERSONA',
-                didValidationStatus: 'failed',
-                didValidationMessage: didResult.message,
-                avatarId: undefined,
-                didStreamId: undefined,
-                avatarSourceUrl: undefined,
-              });
-              setStatusMessage(didResult.message);
-              setActiveMorphStep(MORPH_STEP_COUNT);
-              setWorking(false);
-              return;
-            }
-            saveDraft({
-              step: 'PERSONA',
-              avatarId: didResult.avatarId,
-              didStreamId: didResult.streamId,
-              avatarSourceUrl: didResult.avatarSourceUrl,
-              didValidationStatus: didResult.status,
-              didValidationMessage: didResult.message,
-            });
-            setStatusMessage(didResult.message);
-          }
         }
         if (!cancelled) {
           setActiveMorphStep(MORPH_STEP_COUNT);
@@ -132,7 +96,7 @@ export function MorphingExperience() {
         }
       } catch (caught) {
         if (!cancelled) {
-          setError(caught instanceof Error ? caught.message : tx('magicFailedShort'));
+          setError(localizeGeneratedImageError(caught, languageRef.current, tx));
           setWorking(false);
         }
       }
@@ -196,7 +160,7 @@ export function MorphingExperience() {
                 <div className={`morph-step-item ${state}`} key={label}>
                   <span className="morph-step-icon"><Icon size={17} /></span>
                   <span className="morph-step-copy"><b>{label}</b><small>{stepStateLabel(state, t)}</small></span>
-                  <CircleCheck className="morph-step-check" size={20} />
+                  {state === 'working' ? <LoaderCircle className="morph-step-loader" size={20} /> : <CircleCheck className="morph-step-check" size={20} />}
                 </div>
               );
             })}
@@ -217,8 +181,12 @@ export function MorphingExperience() {
             <span className={`check-big ${working && !visibleError ? 'loading-check' : ''}`}>{visibleError ? '!' : working ? null : <Check size={44} strokeWidth={3.4} />}</span>
             <div>
               <h3>{readyTitle}</h3>
-              <b>{visibleError ? visibleError : readyCopy}</b>
-              <p>{visibleError ? readyCopy : t('readyFinalCopy')}</p>
+              {visibleError || working ? (
+                <>
+                  <b>{visibleError ? visibleError : readyCopy}</b>
+                  {visibleError ? <p>{readyCopy}</p> : null}
+                </>
+              ) : null}
             </div>
             <div className="ready-actions">
               {visibleError ? <button className="primary-button" type="button" onClick={retryMorphing}><RefreshCw size={18} /> {t('retryMagic')}</button> : null}
@@ -255,9 +223,19 @@ function stepStateLabel(state: string, t: ReturnType<typeof useLanguage>['t']) {
   return t('waiting');
 }
 
-function morphingConfigMessage(issue: ConfigIssue, t: ReturnType<typeof useLanguage>['t']) {
-  if (issue === 'didKey') return t('didKeyMissing');
+function morphingConfigMessage(_issue: ConfigIssue, t: ReturnType<typeof useLanguage>['t']) {
   return t('imageConfigMissing');
+}
+
+function localizeGeneratedImageError(error: unknown, language: 'en' | 'zh', t: ReturnType<typeof useLanguage>['t']) {
+  const message = error instanceof Error ? error.message : '';
+  if (!message) return t('magicFailedShort');
+  if (language !== 'zh') return message;
+  if (/Image generation request URL is missing/i.test(message)) return t('imageGenerationRequestUrlMissing');
+  if (/Image generation model name is missing/i.test(message)) return t('imageGenerationModelMissing');
+  if (/Image generation API key is missing/i.test(message)) return t('imageGenerationKeyMissing');
+  if (/Image generation provider rejected the request|Provider request failed|Image generation failed/i.test(message)) return t('imageGenerationProviderFailed');
+  return message;
 }
 
 function blobToDataUrl(blob: Blob) {

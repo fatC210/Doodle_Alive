@@ -198,7 +198,6 @@ function normalizeSettings(settings: AdvancedSettings): AdvancedSettings {
   return {
     ...settings,
     imageProvider: 'custom',
-    customLlmEndpoint: normalizeEndpointValue(settings.customLlmEndpoint),
     customImageEndpoint: normalizeEndpointValue(settings.customImageEndpoint),
   };
 }
