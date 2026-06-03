@@ -33,9 +33,9 @@ export function DrawingCanvas({ freshStart = false, forceDrawStep = false, resum
   const [color, setColor] = useState(DEFAULT_BRUSH_COLOR);
   const [customColor, setCustomColor] = useState('#ffffff');
   const [brushSize, setBrushSize] = useState(18);
-  const [backgroundColor, setBackgroundColor] = useState('#ffffff');
+  const [backgroundColor, setBackgroundColor] = useState(() => (freshStart ? '#ffffff' : loadDraft().backgroundColor || '#ffffff'));
   const [eraser, setEraser] = useState(false);
-  const [validationMessage, setValidationMessage] = useState('');
+  const validationMessage = '';
   const [adjustingUpload, setAdjustingUpload] = useState(false);
   const [uploadZoom, setUploadZoom] = useState(1);
   const [uploadOffset, setUploadOffset] = useState({ x: 0, y: 0 });
@@ -59,10 +59,8 @@ export function DrawingCanvas({ freshStart = false, forceDrawStep = false, resum
     if (!freshStart && forceDrawStep && draft.step !== 'DRAW') {
       saveDraft({ step: 'DRAW' });
     }
-    setValidationMessage('');
     context.fillStyle = draft.backgroundColor || '#ffffff';
     context.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-    setBackgroundColor(draft.backgroundColor || '#ffffff');
 
     if (draft.originalDataUrl) {
       const image = new Image();
