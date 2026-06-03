@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { generateRandomCharacterName } from '../lib/character-name';
 import { getMorphingConfigIssues } from '../lib/config-requirements';
-import { defaultSettings } from '../lib/data';
+import { defaultSettings, styles } from '../lib/data';
 import { canMove, getCreationResumePath, nextStep, previousStep } from '../lib/flow';
 import { buildCustomImageRequestBody, normalizeCustomImageEndpoint } from '../lib/image-gen';
 import { buildChatCompletionsImageRequestBody, extractImageDataUrl, extractImageUrl } from '../lib/image-provider';
 import { buildImagePrompt, extractAccentColors, hasVisibleCanvasContent } from '../lib/prompt';
-import { clearDraft, loadDraft, saveDraft } from '../lib/storage';
+import { clearDraft, dataUrlToBlob, loadDraft, saveDraft } from '../lib/storage';
 
 describe('creation flow state machine', () => {
   test('moves forward one step and allows recovery to DRAW', () => {
@@ -46,11 +46,23 @@ describe('character naming', () => {
 });
 
 describe('prompt assembly', () => {
+  test('keeps only the requested six image styles', () => {
+    expect(styles.map((style) => style.nameZh)).toEqual(['美式学院', '柔光棚拍', '儿童', '水彩', '赛博朋克', '奇幻中世纪']);
+    expect(styles.map((style) => style.image)).toEqual([
+      '/images/styles/美式学院.png',
+      '/images/styles/柔光棚拍.png',
+      '/images/styles/儿童.png',
+      '/images/styles/水彩.png',
+      '/images/styles/赛博朋克.png',
+      '/images/styles/奇幻中世纪.png',
+    ]);
+  });
+
   test('includes D-ID-friendly real frontal face constraints and child safety constraints', () => {
-    const prompt = buildImagePrompt('pixar-3d', ['#ff0000', '#00ff00'], '#ffffff');
-    expect(prompt).toContain('convert the image into a real human frontal face portrait in Pixar 3D style');
+    const prompt = buildImagePrompt('american-academy', ['#ff0000', '#00ff00'], '#ffffff');
+    expect(prompt).toContain('convert the image into a real human frontal face portrait in American Academy style');
     expect(prompt).toContain('D-ID compatible real person portrait');
-    expect(prompt).toContain('polished 3D animated movie character render');
+    expect(prompt).toContain('authentic warm campus portrait photography');
     expect(prompt).toContain('natural realistic skin texture');
     expect(prompt).not.toContain('one single human subject');
     expect(prompt).not.toContain('closed mouth');
@@ -61,9 +73,9 @@ describe('prompt assembly', () => {
   });
 
   test('uses selected style and random human face instructions for blank canvas', () => {
-    const prompt = buildImagePrompt('anime', [], '#ffffff', { isBlankCanvas: true });
-    expect(prompt).toContain('Japanese anime style');
-    expect(prompt).toContain('create a real human frontal face portrait in Anime style');
+    const prompt = buildImagePrompt('cyberpunk', [], '#ffffff', { isBlankCanvas: true });
+    expect(prompt).toContain('Cyberpunk style');
+    expect(prompt).toContain('create a real human frontal face portrait in Cyberpunk style');
     expect(prompt).not.toContain('provided original image');
   });
 
@@ -73,10 +85,19 @@ describe('prompt assembly', () => {
     expect(prompt).toContain('light gray background');
   });
 
+  test('uses real child portrait direction for the former western comic style slot', () => {
+    const prompt = buildImagePrompt('western-comic', [], '#ffffff');
+    expect(prompt).toContain('Real child portrait photography');
+    expect(prompt).toContain('realistic child portrait photography');
+    expect(prompt).toContain('natural youthful facial features');
+    expect(prompt).toContain('convert the image into a real human frontal face portrait in Children style');
+    expect(prompt).not.toContain('Western comic book style');
+  });
+
   test('asks non-blank drawings to become real frontal face portraits in the selected style', () => {
     const prompt = buildImagePrompt('watercolor', ['#2176d8'], '#ffffff');
-    expect(prompt).toContain('Watercolor painting style');
-    expect(prompt).toContain('delicate watercolor portrait on textured paper');
+    expect(prompt).toContain('Depict a frontal portrait of a real person in a watercolor style; the composition should capture the head and shoulders; no text or watermarks.');
+    expect(prompt).not.toContain('delicate watercolor portrait on textured paper');
     expect(prompt).toContain('transform the provided original image into a real human frontal face portrait in Watercolor style');
     expect(prompt).toContain('preserve the original image colors, shapes, mood, and character idea');
     expect(prompt).toContain('D-ID compatible real person portrait');
@@ -219,6 +240,27 @@ describe('OpenAI-compatible image request body', () => {
 });
 
 describe('draft storage', () => {
+  test('converts base64 data URLs to typed blobs without fetch', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (() => { throw new Error('fetch should not be called'); }) as typeof fetch;
+
+    try {
+      const blob = await dataUrlToBlob('data:image/png;base64,SGVsbG8=');
+
+      expect(blob.type).toBe('image/png');
+      expect(await blob.text()).toBe('Hello');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('converts percent-encoded data URLs to typed blobs', async () => {
+    const blob = await dataUrlToBlob('data:text/plain;charset=utf-8,Hello%20Doodle');
+
+    expect(blob.type).toStartWith('text/plain');
+    expect(await blob.text()).toBe('Hello Doodle');
+  });
+
   test('clears both persisted and in-memory draft state', () => {
     const stored = new Map<string, string>();
     const originalWindow = globalThis.window;

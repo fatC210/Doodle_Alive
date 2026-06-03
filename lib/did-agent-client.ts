@@ -18,6 +18,16 @@ export type DidAgentProvisionResponse = {
   status?: string;
 };
 
+export type DidAgentClientKeyRequest = {
+  agentId: string;
+  apiKey?: string;
+  allowedDomains?: string;
+};
+
+export type DidAgentClientKeyResponse = {
+  clientKey: string;
+};
+
 export async function provisionDidAgent(request: DidAgentProvisionRequest): Promise<DidAgentProvisionResponse> {
   const response = await fetch('/api/did-agent', {
     method: 'POST',
@@ -27,6 +37,17 @@ export async function provisionDidAgent(request: DidAgentProvisionRequest): Prom
 
   if (!response.ok) throw new Error(await readErrorMessage(response));
   return await response.json() as DidAgentProvisionResponse;
+}
+
+export async function refreshDidAgentClientKey(request: DidAgentClientKeyRequest): Promise<DidAgentClientKeyResponse> {
+  const response = await fetch('/api/did-agent/client-key', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) throw new Error(await readErrorMessage(response));
+  return await response.json() as DidAgentClientKeyResponse;
 }
 
 async function readErrorMessage(response: Response) {

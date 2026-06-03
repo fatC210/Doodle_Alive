@@ -889,14 +889,12 @@ main { position: relative; z-index: 1; }
 .chat-page-shell { width: 100%; max-width: none; min-height: 100vh; margin: 0; color: var(--text); background: radial-gradient(circle at 9% 4%, color-mix(in srgb, var(--chat-accent-2) 24%, transparent), transparent 26%), radial-gradient(circle at 90% 7%, color-mix(in srgb, var(--chat-accent) 16%, transparent), transparent 24%), linear-gradient(180deg, var(--bg), var(--bg-soft) 62%, color-mix(in srgb, var(--chat-soft) 58%, var(--bg-soft))); }
 .chat-page-shell .text-chat-layout { min-height: 100vh; }
 .chat-page-shell .character-side { position: relative; padding: 20px 18px 26px; display: grid; gap: 0; align-content: start; border-right: 1px solid var(--chat-line); background: color-mix(in srgb, var(--card-strong) 78%, transparent); }
-.chat-back-button { width: 224px; min-height: 54px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid var(--chat-line); border-radius: 999px; color: var(--text); background: var(--card-strong); box-shadow: 0 8px 24px rgba(87,78,148,.07); font-size: 16px; font-weight: 1000; }
-.character-portrait { position: relative; height: 320px; margin-top: 0; aspect-ratio: auto; border-radius: 24px; overflow: hidden; border: 1px solid var(--chat-line-strong); background: linear-gradient(180deg, color-mix(in srgb, var(--chat-soft) 82%, var(--card-strong)), var(--card-strong)); display: grid; place-items: center; box-shadow: 0 10px 32px var(--chat-glow); }
+.chat-back-button { width: 224px; min-height: 44px; margin-bottom: 22px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid var(--chat-line); border-radius: 999px; color: var(--text); background: var(--card-strong); box-shadow: 0 8px 24px rgba(87,78,148,.07); font-size: 16px; font-weight: 1000; }
+.character-portrait { position: relative; height: 320px; aspect-ratio: auto; border-radius: 24px; overflow: hidden; border: 1px solid var(--chat-line-strong); background: linear-gradient(180deg, color-mix(in srgb, var(--chat-soft) 82%, var(--card-strong)), var(--card-strong)); display: grid; place-items: center; box-shadow: 0 10px 32px var(--chat-glow); }
 .did-portrait-video { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; object-fit: cover; background: transparent; opacity: 0; pointer-events: none; }
 .character-portrait .portrait-image { position: absolute; inset: 0; z-index: 1; }
 .character-portrait.has-live-avatar .did-portrait-video { opacity: 1; }
 .character-portrait.has-live-avatar .portrait-image { opacity: 0; }
-.avatar-expression-badge { position: absolute; right: 14px; bottom: 14px; z-index: 3; width: 46px; height: 46px; display: grid; place-items: center; border-radius: 50%; background: rgba(255,255,255,.86); border: 1px solid rgba(255,255,255,.9); box-shadow: 0 10px 24px rgba(44,35,92,.16); font-size: 24px; transform-origin: center; }
-.character-portrait.is-speaking .avatar-expression-badge { animation: avatar-badge-pop 860ms ease-in-out infinite; }
 .character-portrait.is-speaking { box-shadow: 0 14px 38px var(--chat-glow), 0 0 0 5px color-mix(in srgb, var(--chat-accent) 13%, transparent); }
 .ready-box { display: flex; align-items: center; gap: 12px; margin-top: 22px; padding: 16px 18px; border-radius: 16px; background: color-mix(in srgb, var(--chat-accent) 10%, transparent); border: 1px solid var(--chat-line); color: var(--text); font-weight: 900; }
 .ready-box .dot { width: 15px; height: 15px; flex: 0 0 15px; }
@@ -1505,8 +1503,6 @@ main { position: relative; z-index: 1; }
 @keyframes scanImage { 0%, 100% { transform: translateY(-72%); opacity: .2; } 50% { transform: translateY(72%); opacity: 1; } }
 @keyframes loaderFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
 @keyframes loadingShine { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
-@keyframes avatar-badge-pop { 0%, 100% { transform: scale(1) rotate(-3deg); } 50% { transform: scale(1.12) rotate(5deg); } }
-
 @media (max-width: 1120px) {
   .topbar { grid-template-columns: 1fr; justify-items: center; }
   .top-actions { justify-content: center; }

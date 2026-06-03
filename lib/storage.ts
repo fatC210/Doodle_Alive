@@ -120,7 +120,29 @@ export async function blobToDataUrl(blob: Blob) {
 }
 
 export async function dataUrlToBlob(dataUrl: string) {
-  return fetch(dataUrl).then((response) => response.blob());
+  if (!dataUrl.startsWith('data:')) throw new Error('Invalid data URL.');
+  const commaIndex = dataUrl.indexOf(',');
+  if (commaIndex < 0) throw new Error('Invalid data URL.');
+
+  const metadata = dataUrl.slice(5, commaIndex);
+  const encodedData = dataUrl.slice(commaIndex + 1);
+  const contentType = metadata.split(';')[0] || 'application/octet-stream';
+  const isBase64 = metadata.split(';').some((part) => part.toLowerCase() === 'base64');
+  const bytes = isBase64 ? decodeBase64Bytes(encodedData) : decodeTextBytes(encodedData);
+  return new Blob([bytes], { type: contentType });
+}
+
+function decodeBase64Bytes(value: string) {
+  const binary = atob(value.replace(/\s+/g, ''));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+function decodeTextBytes(value: string) {
+  return new TextEncoder().encode(decodeURIComponent(value));
 }
 
 async function removeLegacyStarterCharacters() {

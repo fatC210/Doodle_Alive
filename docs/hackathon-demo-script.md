@@ -16,7 +16,7 @@ Doodle Alive lets a child draw a face, choose an art style, and turn the drawing
 1. 点击 New Character。
 2. 在画布中画一个居中的正脸，眼睛睁开，嘴巴闭合。
 3. 点击 Continue to Style。
-4. 选择 Pixar 3D 或 Watercolor。
+4. 选择 美式学院 或 水彩。
 5. 点击 Bring to Life。
 6. Morphing 阶段会生成图并进行 D-ID face validation。
 

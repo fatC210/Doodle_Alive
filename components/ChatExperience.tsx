@@ -4,10 +4,12 @@ import Link from 'next/link';
 import Script from 'next/script';
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { ChevronLeft, Moon, Sun, Volume2 } from 'lucide-react';
+import { refreshDidAgentClientKey } from '@/lib/did-agent-client';
 import { getDidAgentEmbedConfig } from '@/lib/did-agent-embed';
 import { getLocalizedPersonaName, getLocalizedStyleName } from '@/lib/display-names';
 import { useLanguage } from '@/lib/i18n';
-import { getCharacter, getMessages, saveMessage } from '@/lib/storage';
+import { loadDidApiKey } from '@/lib/secrets';
+import { getCharacter, getMessages, saveCharacter, saveMessage } from '@/lib/storage';
 import { useTheme } from '@/lib/theme';
 import type { ChatMessage, DoodleCharacter } from '@/lib/types';
 import { CharacterAvatar } from './Illustrations';
@@ -23,9 +25,10 @@ export function ChatExperience({ characterId }: { characterId: string }) {
     async function load() {
       setLoaded(false);
       const stored = await getCharacter(characterId);
-      if (stored) setCharacter(stored);
+      const refreshedCharacter = stored ? await refreshStoredDidClientKey(stored) : undefined;
+      setCharacter(refreshedCharacter ?? null);
       const history = await getMessages(characterId);
-      const repairedHistory = stored ? await repairCorruptedWelcomeMessages(history, stored, language) : history;
+      const repairedHistory = refreshedCharacter ? await repairCorruptedWelcomeMessages(history, refreshedCharacter, language) : history;
       setMessages(repairedHistory);
       setLoaded(true);
     }
@@ -71,7 +74,6 @@ export function ChatExperience({ characterId }: { characterId: string }) {
           <Link className="chat-back-button" href="/"><ChevronLeft size={20} /> {t('navHome')}</Link>
           <div className="character-portrait">
             {display.generatedDataUrl ? <img className="portrait-image" src={display.generatedDataUrl} alt={display.name} /> : <CharacterAvatar tone={display.tone || 'mint'} size="xl" />}
-            <span className="avatar-expression-badge" aria-hidden="true">??</span>
           </div>
           <div className="ready-box"><span className="dot" /><span><b>{display.name} {t('readyToChat')}</b><small>{t('didAgentReady')}</small></span></div>
         </aside>
@@ -97,6 +99,27 @@ export function ChatExperience({ characterId }: { characterId: string }) {
       </section>
     </div>
   );
+}
+
+async function refreshStoredDidClientKey(character: DoodleCharacter) {
+  if (!character.didAgentId) return character;
+
+  try {
+    const apiKey = await loadDidApiKey();
+    const { clientKey } = await refreshDidAgentClientKey({
+      agentId: character.didAgentId,
+      apiKey,
+      allowedDomains: window.location.origin,
+    });
+    if (!clientKey || clientKey === character.didClientKey) return character;
+
+    const updatedCharacter = { ...character, didClientKey: clientKey, updatedAt: new Date().toISOString() };
+    await saveCharacter(updatedCharacter);
+    return updatedCharacter;
+  } catch (error) {
+    console.warn('[D-ID Agent] failed to refresh client key', error);
+    return character;
+  }
 }
 
 function MissingDidAgentConfig() {
@@ -175,6 +198,7 @@ function DidAgentEmbed({ agentId, clientKey }: { agentId: string; clientKey: str
       src={config.src}
       strategy="afterInteractive"
       type="module"
+      crossOrigin="anonymous"
       data-name="did-agent"
       data-mode="fabio"
       data-position="right"
@@ -225,15 +249,12 @@ function getCharacterChatTheme(character: DoodleCharacter): CSSProperties {
 
 function getTonePalette(tone: string) {
   const palettes: Record<string, [string, string, string]> = {
-    pixar: ['#2d9cff', '#36d381', '#edf7ff'],
-    disney: ['#ff7aa8', '#ffb060', '#fff2f6'],
-    anime: ['#8b5cff', '#43d8ff', '#f3efff'],
+    academy: ['#2d5f9a', '#c98b4a', '#eef4ff'],
+    studio: ['#222222', '#b8bec8', '#f4f5f7'],
     comic: ['#ff4d5a', '#ffd23f', '#fff4df'],
     watercolor: ['#73a7ff', '#ff9ed8', '#f1f7ff'],
-    pixel: ['#7ed957', '#1f2933', '#efffe8'],
     cyber: ['#00e5ff', '#ff4fd8', '#effbff'],
     fantasy: ['#9b6dff', '#ffca5f', '#f6efff'],
-    chibi: ['#ff77c8', '#8b5cff', '#fff0fa'],
   };
 
   return palettes[normalizeThemeName(tone)] ?? ['#8456ff', '#ff8abf', '#f6f0ff'];

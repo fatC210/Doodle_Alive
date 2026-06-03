@@ -53,6 +53,11 @@ export async function verifyDidApiKey(apiKey: string) {
   return { ok: true };
 }
 
+export async function refreshDidAgentClientKey(payload: DidRequestBody) {
+  const apiKey = getDidApiKey(payload);
+  return { clientKey: await createClientKey(apiKey, payload.allowedDomains) };
+}
+
 export function didErrorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : 'D-ID Agent provisioning failed.';
   return NextResponse.json({ error: message }, { status: 502 });

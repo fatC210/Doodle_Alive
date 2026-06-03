@@ -17,26 +17,12 @@ const STYLE_FIDELITY_PROMPTS: Record<string, string[]> = {
     'light gray background',
     'clean neutral portrait retouching',
   ],
-  'pixar-3d': [
-    'polished 3D animated movie character render',
-    'rounded appealing shapes and expressive brows',
-    'soft subsurface-style skin and cinematic rim light',
-  ],
-  anime: [
-    'high quality Japanese anime portrait illustration',
-    'clean ink line art and cel shaded color blocks',
-    'large detailed eyes with crisp highlights',
-  ],
   'western-comic': [
-    'American superhero comic book cover portrait',
-    'thick black ink outlines and bold graphic shadows',
-    'visible halftone dot shading and saturated print colors',
+    'realistic child portrait photography',
+    'natural youthful facial features',
+    'bright clean lifestyle portrait lighting',
   ],
-  watercolor: [
-    'delicate watercolor portrait on textured paper',
-    'transparent pigment washes and soft bleeding edges',
-    'pastel color palette with gentle handmade brush texture',
-  ],
+  watercolor: [],
   cyberpunk: [
     'cinematic cyberpunk character portrait illustration',
     'neon magenta cyan edge lights and glossy techwear',
@@ -46,11 +32,6 @@ const STYLE_FIDELITY_PROMPTS: Record<string, string[]> = {
     'fantasy medieval character portrait illustration',
     'ornate costume details and subtle magical glow',
     'storybook royal lighting with painterly realism',
-  ],
-  'chibi-kawaii': [
-    'cute chibi character illustration',
-    'super deformed big head and tiny body proportions',
-    'rounded soft shapes with toy-like warm colors',
   ],
 };
 const GUIDE_COLORS = [

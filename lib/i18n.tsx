@@ -220,6 +220,9 @@ const translations = {
     chinese: '中文',
     languageInstant: 'Language change is applied instantly.',
     allChangesSaved: 'All changes are saved securely.',
+    unsavedChanges: 'You have unsaved image provider changes.',
+    saved: 'Saved',
+    unsaved: 'Unsaved',
     saveChanges: 'Save Changes',
 
     loadingCharacter: 'Loading character',
@@ -508,6 +511,9 @@ const translations = {
     chinese: '中文',
     languageInstant: '语言切换会立即生效。',
     allChangesSaved: '所有更改已安全保存。',
+    unsavedChanges: '图像供应商有未保存的更改。',
+    saved: '已保存',
+    unsaved: '未保存',
     saveChanges: '保存更改',
 
     loadingCharacter: '正在加载角色',

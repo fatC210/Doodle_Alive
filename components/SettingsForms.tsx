@@ -101,7 +101,7 @@ export function AdvancedSettingsForm() {
       const loadedCustomImageKey = await loadCustomImageKey();
       setSettings(loadedSettings);
       setCustomImageKey(loadedCustomImageKey);
-      setImageProviderStatus({ status: hasCompleteImageProviderConfig(loadedSettings, loadedCustomImageKey) ? 'untested' : 'missing' });
+      setImageProviderStatus({ status: hasCompleteImageProviderConfig(loadedSettings, loadedCustomImageKey) ? 'valid' : 'missing' });
     }
     load();
   }, []);
@@ -179,7 +179,7 @@ export function AdvancedSettingsForm() {
                 <span aria-hidden="true">●</span> {imageProviderStatusLabel(imageProviderStatus, t)}
               </span>
               <span className={`status-badge ${imageProviderStatus.status === 'valid' ? '' : 'missing'}`}>
-                {statusLabel(imageProviderStatus.status, t)}
+                {imageProviderStatusBadgeLabel(imageProviderStatus, t)}
                 {imageProviderStatus.status === 'valid' ? <Check size={14} /> : <span className="badge-mark">!</span>}
               </span>
             </div>
@@ -268,5 +268,12 @@ function imageProviderStatusLabel(status: ImageProviderStatus, t: ReturnType<typ
   if (status.status === 'valid') return t('allChangesSaved');
   if (status.status === 'missing') return t('imageConfigMissing');
   if (status.status === 'invalid') return t('invalid');
-  return t('notTested');
+  return t('unsavedChanges');
+}
+
+function imageProviderStatusBadgeLabel(status: ImageProviderStatus, t: ReturnType<typeof useLanguage>['t']) {
+  if (status.status === 'valid') return t('saved');
+  if (status.status === 'missing') return t('missing');
+  if (status.status === 'invalid') return t('invalid');
+  return t('unsaved');
 }
