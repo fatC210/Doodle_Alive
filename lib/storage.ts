@@ -12,7 +12,8 @@ const SETTINGS_KEY = 'doodle-settings';
 const STARTER_DATA_CLEANUP_KEY = 'doodle-starter-data-cleaned';
 const FALLBACK_PREFIX = 'doodle-fallback-store:';
 const LEGACY_STARTER_CHARACTER_IDS = ['lumi', 'rex', 'nova', 'bamboo', 'milo', 'zara'];
-const LEGACY_PLACEHOLDER_ENDPOINT_HOSTS = ['api.your-llm-provider.com', 'api.your-image-provider.com'];
+const LEGACY_PLACEHOLDER_ENDPOINT_HOSTS = ['api.your-llm-provider.com', 'api.your-image-provider.com', 'router.shengsuanyun.com'];
+const LEGACY_PLACEHOLDER_IMAGE_MODELS = ['openai/gpt-image-2'];
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 const memoryStorage = new Map<string, string>();
@@ -221,11 +222,17 @@ function normalizeSettings(settings: AdvancedSettings): AdvancedSettings {
     ...settings,
     imageProvider: 'custom',
     customImageEndpoint: normalizeEndpointValue(settings.customImageEndpoint),
+    customImageModel: normalizeImageModelValue(settings.customImageModel),
   };
 }
 
 function normalizeEndpointValue(value: string) {
   if (LEGACY_PLACEHOLDER_ENDPOINT_HOSTS.some((host) => value.includes(host))) return '';
+  return value;
+}
+
+function normalizeImageModelValue(value: string) {
+  if (LEGACY_PLACEHOLDER_IMAGE_MODELS.includes(value)) return '';
   return value;
 }
 

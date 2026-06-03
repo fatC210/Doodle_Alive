@@ -180,6 +180,6 @@ function localizeDidAgentError(error: unknown, language: LanguageCode, t: Return
   const message = error instanceof Error ? error.message : '';
   if (!message) return t('saveCharacterFailed');
   if (language !== 'zh') return message;
-  if (/D-ID|DID_API_KEY|DID_ALLOWED_DOMAINS|server|agent|avatar|client key|source/i.test(message)) return t('didAgentCreationFailed');
+  if (/D-ID|agent|avatar|client key|source/i.test(message)) return t('didAgentCreationFailed');
   return message;
 }

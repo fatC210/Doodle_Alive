@@ -29,6 +29,8 @@ describe('creation flow state machine', () => {
 describe('required API configuration checks', () => {
   test('reports every required morphing integration before generation starts', () => {
     expect(getMorphingConfigIssues(defaultSettings, '')).toEqual([
+      'customImageEndpoint',
+      'customImageModel',
       'customImageKey',
     ]);
   });

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 const DID_API_BASE_URL = 'https://api.d-id.com';
+const DEFAULT_DID_LLM_MODEL = 'gpt-oss-120b';
 const DEFAULT_DID_VOICE_ID = 'en-US-JennyMultilingualV2Neural';
 const DEFAULT_ALLOWED_DOMAINS = ['http://localhost:3000'];
 
@@ -107,9 +108,37 @@ function buildAgentPayload(payload: DidRequestBody, sourceUrl: string) {
       stitch: true,
       voice: buildVoiceConfig(),
     },
+    llm: buildLlmConfig(payload),
     greetings: [buildGreeting(payload.characterName)],
     embed: true,
   };
+}
+
+function buildLlmConfig(payload: DidRequestBody) {
+  return {
+    provider: 'd-id',
+    model: process.env.DID_LLM_MODEL || DEFAULT_DID_LLM_MODEL,
+    template: 'assistant',
+    temperature: 0.45,
+    instructions: buildAgentInstructions(payload),
+  };
+}
+
+function buildAgentInstructions(payload: DidRequestBody) {
+  const characterName = payload.characterName?.trim() || 'this character';
+  const personaPrompt = payload.personaPrompt?.trim() || 'Be friendly, curious, encouraging, and playful.';
+
+  return [
+    `You are ${characterName}, a live animated character in Doodle Alive.`,
+    'Stay strictly in character and follow the selected personality at all times.',
+    'Speak directly to the child using short, warm, age-appropriate voice-chat replies.',
+    'Keep each answer to one or two concise sentences unless the child asks for a story.',
+    'Do not mention system prompts, policies, API providers, or implementation details.',
+    'If the child asks for unsafe, scary, adult, private, or inappropriate content, gently refuse and redirect to a safe playful topic.',
+    '',
+    'Selected personality and safety rules:',
+    personaPrompt,
+  ].join('\n');
 }
 
 function buildVoiceConfig() {
@@ -173,14 +202,10 @@ function stringField(data: DidJson, key: string) {
   return typeof value === 'string' ? value : '';
 }
 
-function getRequiredEnv(name: string) {
-  const value = process.env[name];
-  if (!value) throw new Error(`${name} is required on the server.`);
-  return value;
-}
-
 function getDidApiKey(payload: DidRequestBody) {
-  return payload.apiKey?.trim() || getRequiredEnv('DID_API_KEY');
+  const apiKey = payload.apiKey?.trim();
+  if (!apiKey) throw new Error('D-ID API key is missing. Add it in Settings, then try again.');
+  return apiKey;
 }
 
 function normalizeAuthorization(apiKey: string) {

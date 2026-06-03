@@ -36,8 +36,8 @@ export function pickRandomPersona(): PersonaPreset {
 export const defaultSettings: AdvancedSettings = {
   imageProvider: 'custom',
   customImageKey: '',
-  customImageModel: 'openai/gpt-image-2',
-  customImageEndpoint: 'https://router.shengsuanyun.com/api',
+  customImageModel: '',
+  customImageEndpoint: '',
   language: 'en',
 };
 

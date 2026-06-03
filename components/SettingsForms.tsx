@@ -4,7 +4,14 @@ import { useEffect, useState } from 'react';
 import { Check, RotateCcw } from 'lucide-react';
 import { defaultSettings } from '@/lib/data';
 import { useLanguage } from '@/lib/i18n';
-import { loadCustomImageKey, loadDidApiKey, saveCustomImageKey, saveDidApiKey } from '@/lib/secrets';
+import {
+  isDidApiKeyVerified,
+  loadCustomImageKey,
+  loadDidApiKey,
+  markDidApiKeyVerified,
+  saveCustomImageKey,
+  saveDidApiKey,
+} from '@/lib/secrets';
 import { loadSettings, saveSettings } from '@/lib/storage';
 import { useTheme } from '@/lib/theme';
 import type { AdvancedSettings, ApiKeyStatus } from '@/lib/types';
@@ -23,7 +30,7 @@ export function ApiKeysForm() {
     async function load() {
       const loadedDidApiKey = await loadDidApiKey();
       setDidApiKey(loadedDidApiKey);
-      setDidStatus(loadedDidApiKey.trim() ? 'untested' : 'missing');
+      setDidStatus(await getDidStatusForKey(loadedDidApiKey));
     }
     load();
   }, []);
@@ -40,6 +47,10 @@ export function ApiKeysForm() {
       setDidStatus('missing');
       return;
     }
+    if (await isDidApiKeyVerified(nextKey)) {
+      setDidStatus('valid');
+      return;
+    }
 
     setTestingDidKey(true);
     setDidStatus('untested');
@@ -49,7 +60,12 @@ export function ApiKeysForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ apiKey: nextKey }),
       });
-      setDidStatus(response.ok ? 'valid' : 'invalid');
+      if (response.ok) {
+        await markDidApiKeyVerified(nextKey);
+        setDidStatus('valid');
+      } else {
+        setDidStatus('invalid');
+      }
     } catch {
       setDidStatus('invalid');
     } finally {
@@ -86,6 +102,11 @@ export function ApiKeysForm() {
       </div>
     </section>
   );
+}
+
+async function getDidStatusForKey(value: string): Promise<ApiKeyStatus> {
+  if (!value.trim()) return 'missing';
+  return (await isDidApiKeyVerified(value)) ? 'valid' : 'untested';
 }
 
 export function AdvancedSettingsForm() {
@@ -198,7 +219,7 @@ export function AdvancedSettingsForm() {
                   <input
                     value={customImageKey}
                     onChange={(event) => updateCustomImageKey(event.target.value)}
-                    placeholder="sk-••••••••••••••••••••"
+                    placeholder="sk-proj-..."
                     type="password"
                   />
                 </label>

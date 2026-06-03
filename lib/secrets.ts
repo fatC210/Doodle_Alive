@@ -5,6 +5,7 @@ import { decryptSecret, encryptSecret, getStoredItem, loadSettings, removeStored
 const CUSTOM_LLM_KEY = 'doodle-key-custom-llm';
 const CUSTOM_IMAGE_KEY = 'doodle-key-custom-image';
 const DID_API_KEY = 'doodle-key-did-api';
+const DID_API_KEY_VERIFIED = 'doodle-key-did-api-verified';
 const LEGACY_IMAGE_KEY = 'doodle-key-image';
 
 export async function loadCustomLlmKey() {
@@ -52,8 +53,23 @@ export async function loadDidApiKey() {
 }
 
 export async function saveDidApiKey(value: string) {
-  if (value) setStoredItem(DID_API_KEY, await encryptSecret(value));
-  else removeStoredItem(DID_API_KEY);
+  const trimmedValue = value.trim();
+  if (trimmedValue) setStoredItem(DID_API_KEY, await encryptSecret(trimmedValue));
+  else {
+    removeStoredItem(DID_API_KEY);
+    removeStoredItem(DID_API_KEY_VERIFIED);
+  }
+}
+
+export async function isDidApiKeyVerified(value: string) {
+  const trimmedValue = value.trim();
+  if (!trimmedValue) return false;
+  return getStoredItem(DID_API_KEY_VERIFIED) === await digestSecret(trimmedValue);
+}
+
+export async function markDidApiKeyVerified(value: string) {
+  const trimmedValue = value.trim();
+  if (trimmedValue) setStoredItem(DID_API_KEY_VERIFIED, await digestSecret(trimmedValue));
 }
 
 function clearLegacyImageSettings(settings: ReturnType<typeof loadSettings> & { imageApiKey?: string }) {
@@ -61,4 +77,10 @@ function clearLegacyImageSettings(settings: ReturnType<typeof loadSettings> & { 
   const nextSettings = { ...settings };
   delete nextSettings.imageApiKey;
   saveSettings(nextSettings);
+}
+
+async function digestSecret(value: string) {
+  const encoded = new TextEncoder().encode(value);
+  const digest = await window.crypto.subtle.digest('SHA-256', encoded);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
