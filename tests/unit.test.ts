@@ -2,10 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import { generateRandomCharacterName } from '../lib/character-name';
 import { getMorphingConfigIssues } from '../lib/config-requirements';
 import { defaultSettings, personas, pickRandomPersona, styles } from '../lib/data';
-import { buildAgentPayload } from '../lib/did-agent-server';
+import { buildAgentClientKeyPath, buildAgentPayload } from '../lib/did-agent-server';
 import { canMove, getCreationResumePath, nextStep, previousStep } from '../lib/flow';
 import { buildCustomImageRequestBody, normalizeCustomImageEndpoint } from '../lib/image-gen';
-import { buildChatCompletionsImageRequestBody, buildCustomImageEditEndpoint, buildResponsesImageRequestBody, extractImageDataUrl, extractImageUrl } from '../lib/image-provider';
+import { buildChatCompletionsImageRequestBody, buildCustomImageEditEndpoint, buildCustomImageEditJsonRequestBody, buildResponsesImageRequestBody, extractImageDataUrl, extractImageUrl, usesJsonImageEditPayload } from '../lib/image-provider';
 import { buildImagePrompt, extractAccentColors, hasVisibleCanvasContent } from '../lib/prompt';
 import { clearDraft, dataUrlToBlob, loadDraft, loadSettings, resetSettings, saveDraft, saveSettings } from '../lib/storage';
 
@@ -57,6 +57,12 @@ describe('character naming', () => {
 });
 
 describe('D-ID agent payload', () => {
+  test('creates client keys through the scoped agent endpoint', () => {
+    expect(buildAgentClientKeyPath('v2_agt_example')).toBe('/agents/v2_agt_example/client-keys');
+    expect(buildAgentClientKeyPath('agent/id with spaces')).toBe('/agents/agent%2Fid%20with%20spaces/client-keys');
+    expect(() => buildAgentClientKeyPath('  ')).toThrow('D-ID Agent id is missing');
+  });
+
   test('uses photo avatar presenter with default OpenAI llm provider', () => {
     const payload = buildAgentPayload({ characterName: 'Milo' }, 'https://example.com/milo.png');
 
@@ -272,6 +278,7 @@ describe('OpenAI-compatible image request body', () => {
     expect(normalizeCustomImageEndpoint('https://onetoken.sh/v1')).toBe('https://onetoken.sh/v1/images/generations');
     expect(normalizeCustomImageEndpoint('https://router.shengsuanyun.com/api')).toBe('https://router.shengsuanyun.com/api/v1/images/generations');
     expect(normalizeCustomImageEndpoint('https://router.shengsuanyun.com/api/v1/')).toBe('https://router.shengsuanyun.com/api/v1/images/generations');
+    expect(normalizeCustomImageEndpoint('https://router.shengsuanyun.com/api/v1', 'openai/gpt-image-2')).toBe('https://router.shengsuanyun.com/api/v1/images/generations');
     expect(normalizeCustomImageEndpoint('https://api.example.com')).toBe('https://api.example.com/v1/images/generations');
     expect(normalizeCustomImageEndpoint('https://api.example.com/api')).toBe('https://api.example.com/api/v1/images/generations');
     expect(normalizeCustomImageEndpoint('https://api.example.com/v1/images/generations')).toBe('https://api.example.com/v1/images/generations');
@@ -341,6 +348,29 @@ describe('OpenAI-compatible image request body', () => {
   test('normalizes image generation URLs to image edit URLs', () => {
     expect(buildCustomImageEditEndpoint('https://api.example.com/v1/images/generations')).toBe('https://api.example.com/v1/images/edits');
     expect(buildCustomImageEditEndpoint('https://api.example.com/v1/images/edits')).toBe('https://api.example.com/v1/images/edits');
+  });
+
+  test('uses Shengsuanyun JSON payloads for image edits', () => {
+    const sourceImageDataUrl = 'data:image/png;base64,ZmFrZS1kcmF3aW5n';
+    const editEndpoint = buildCustomImageEditEndpoint('https://router.shengsuanyun.com/api/v1/images/generations');
+    const body = buildCustomImageEditJsonRequestBody({
+      provider: 'custom',
+      model: 'openai/gpt-image-1.5',
+      prompt: 'keep the doodle colors',
+      sourceImageDataUrl,
+    });
+
+    expect(editEndpoint).toBe('https://router.shengsuanyun.com/api/v1/images/edits');
+    expect(usesJsonImageEditPayload(editEndpoint)).toBe(true);
+    expect(usesJsonImageEditPayload('https://api.openai.com/v1/images/edits')).toBe(false);
+    expect(JSON.parse(body)).toEqual({
+      model: 'openai/gpt-image-1.5',
+      prompt: 'keep the doodle colors',
+      image: sourceImageDataUrl,
+      size: '1024x1024',
+      n: 1,
+      quality: 'medium',
+    });
   });
 
   test('extracts image URLs from common OpenAI-compatible router response shapes', () => {

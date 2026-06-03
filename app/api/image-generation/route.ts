@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   buildChatCompletionsImageRequestBody,
+  buildCustomImageEditJsonRequestBody,
   buildCustomImageEditEndpoint,
   buildCustomImageRequestBody,
   buildResponsesImageEndpoint,
@@ -9,6 +10,7 @@ import {
   extractImageUrl,
   normalizeCustomImageEndpoint,
   supportsResponsesImageTool,
+  usesJsonImageEditPayload,
   usesChatCompletionsForImages,
 } from '@/lib/image-provider';
 import type { ImageGenerationRequest } from '@/lib/types';
@@ -30,8 +32,11 @@ export async function POST(request: NextRequest) {
   if (!payload.model) return NextResponse.json({ error: 'Image generation model name is missing.' }, { status: 400 });
   if (!payload.apiKey) return NextResponse.json({ error: 'Image generation API key is missing.' }, { status: 400 });
 
+  let responseDiagnostic = safeProviderDiagnostic('image-api', endpoint, payload.model);
+
   try {
     const primaryRequest = await buildPrimaryProviderRequest(endpoint, payload);
+    responseDiagnostic = safeProviderDiagnostic(primaryRequest.stage, primaryRequest.endpoint, payload.model);
     let providerResponse = await fetch(primaryRequest.endpoint, primaryRequest.init);
     let responseEndpoint = primaryRequest.endpoint;
 
@@ -48,6 +53,7 @@ export async function POST(request: NextRequest) {
             buildJsonProviderRequest(payload, buildResponsesImageRequestBody(payload)),
           );
           responseEndpoint = responsesEndpoint;
+          responseDiagnostic = safeProviderDiagnostic('responses-api', responseEndpoint, payload.model);
         }
       }
 
@@ -85,7 +91,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (caught) {
     const message = caught instanceof Error ? caught.message : 'Image generation failed.';
-    return NextResponse.json({ error: message }, { status: 502 });
+    return NextResponse.json({ error: message, diagnostic: responseDiagnostic }, { status: 502 });
   }
 }
 
@@ -166,8 +172,17 @@ async function buildPrimaryProviderRequest(endpoint: string, payload: ImageGener
   }
 
   if (payload.sourceImageDataUrl) {
+    const editEndpoint = buildCustomImageEditEndpoint(endpoint);
+    if (usesJsonImageEditPayload(editEndpoint)) {
+      return {
+        endpoint: editEndpoint,
+        init: buildJsonProviderRequest(payload, buildCustomImageEditJsonRequestBody(payload)),
+        stage: 'image-edit-json-api',
+      };
+    }
+
     return {
-      endpoint: buildCustomImageEditEndpoint(endpoint),
+      endpoint: editEndpoint,
       init: buildMultipartProviderRequest(payload, buildCustomImageEditFormData(payload)),
       stage: 'image-edit-api',
     };

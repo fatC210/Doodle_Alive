@@ -24,6 +24,26 @@ export function buildCustomImageRequestBody(request: ImageGenerationRequest) {
   return JSON.stringify(body);
 }
 
+export function buildCustomImageEditJsonRequestBody(request: ImageGenerationRequest) {
+  const normalizedModel = normalizeModelFamily(request.model);
+  const isGptImageModel = normalizedModel.startsWith('gpt-image-');
+  const body: Record<string, unknown> = {
+    model: request.model || '',
+    prompt: request.prompt,
+    image: request.sourceImageDataUrl || '',
+    size: '1024x1024',
+    n: 1,
+  };
+
+  if (isGptImageModel) {
+    body.quality = 'medium';
+  } else {
+    body.response_format = 'b64_json';
+  }
+
+  return JSON.stringify(body);
+}
+
 export function buildResponsesImageRequestBody(request: ImageGenerationRequest) {
   const input = request.sourceImageDataUrl
     ? [{
@@ -87,6 +107,15 @@ export function supportsResponsesImageTool(model = '') {
 export function usesChatCompletionsForImages(model = '') {
   const normalizedModel = normalizeModelFamily(model);
   return normalizedModel.startsWith('gemini-') && normalizedModel.includes('image');
+}
+
+export function usesJsonImageEditPayload(endpoint: string) {
+  try {
+    const url = new URL(endpoint);
+    return url.host === 'router.shengsuanyun.com' && /\/images\/edits$/i.test(url.pathname);
+  } catch {
+    return false;
+  }
 }
 
 function normalizeModelFamily(model = '') {

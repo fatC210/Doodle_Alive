@@ -39,11 +39,21 @@ function buildProxyRequest(request: ImageGenerationRequest): RequestInit {
 
 async function readErrorMessage(response: Response) {
   try {
-    const data = await response.json() as { error?: string };
-    if (data.error) return data.error;
+    const data = await response.json() as {
+      error?: string;
+      diagnostic?: { endpointHost?: string; endpointPath?: string; model?: string };
+    };
+    if (data.error) return `${data.error}${formatProviderDiagnostic(data.diagnostic)}`;
   } catch {
     const text = await response.text().catch(() => '');
     if (text) return text;
   }
   return `Provider request failed: ${response.status}`;
+}
+
+function formatProviderDiagnostic(diagnostic?: { endpointHost?: string; endpointPath?: string; model?: string }) {
+  if (!diagnostic?.endpointHost) return '';
+  const target = `${diagnostic.endpointHost}${diagnostic.endpointPath || ''}`;
+  const model = diagnostic.model ? `, model: ${diagnostic.model}` : '';
+  return ` Request target: ${target}${model}.`;
 }

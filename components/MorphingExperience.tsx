@@ -234,6 +234,7 @@ function localizeGeneratedImageError(error: unknown, language: 'en' | 'zh', t: R
   if (/Image generation request URL is missing/i.test(message)) return t('imageGenerationRequestUrlMissing');
   if (/Image generation model name is missing/i.test(message)) return t('imageGenerationModelMissing');
   if (/Image generation API key is missing/i.test(message)) return t('imageGenerationKeyMissing');
+  if (/Image generation provider rejected the request/i.test(message)) return message;
   if (/Image generation provider rejected the request|Provider request failed|Image generation failed/i.test(message)) return t('imageGenerationProviderFailed');
   return message;
 }

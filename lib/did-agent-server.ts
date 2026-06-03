@@ -42,7 +42,7 @@ export async function provisionDidAgent(payload: DidRequestBody): Promise<DidAge
   const agentId = stringField(agent, 'id') || payload.agentId || '';
   if (!agentId) throw new Error('D-ID did not return an agent id.');
 
-  const clientKey = stringField(agent, 'client_key') || await createClientKey(apiKey, payload.allowedDomains);
+  const clientKey = await createClientKey(apiKey, payload.allowedDomains, agentId);
 
   return {
     agentId,
@@ -61,7 +61,7 @@ export async function verifyDidApiKey(apiKey: string) {
 
 export async function refreshDidAgentClientKey(payload: DidRequestBody) {
   const apiKey = getDidApiKey(payload);
-  return { clientKey: await createClientKey(apiKey, payload.allowedDomains) };
+  return { clientKey: await createClientKey(apiKey, payload.allowedDomains, payload.agentId) };
 }
 
 export function didErrorResponse(error: unknown) {
@@ -187,19 +187,29 @@ function buildVoiceConfig() {
   };
 }
 
-async function createClientKey(apiKey: string, configuredDomains: string | undefined) {
+async function createClientKey(apiKey: string, configuredDomains: string | undefined, agentId: string | undefined) {
+  const result = await didFetchJson(buildAgentClientKeyPath(agentId), apiKey, {
+    method: 'POST',
+    body: JSON.stringify({ allowed_domains: resolveAllowedDomains(configuredDomains) }),
+  });
+  const clientKey = stringField(result, 'client_key') || stringField(result, 'clientKey') || stringField(result, 'key');
+  if (!clientKey) throw new Error('D-ID did not return a client key.');
+  return clientKey;
+}
+
+export function buildAgentClientKeyPath(agentId: string | undefined) {
+  const trimmed = agentId?.trim();
+  if (!trimmed) throw new Error('D-ID Agent id is missing. Create the character again, then retry voice chat.');
+  return `/agents/${encodeURIComponent(trimmed)}/client-keys`;
+}
+
+function resolveAllowedDomains(configuredDomains: string | undefined) {
   const allowedDomains = (configuredDomains || process.env.DID_ALLOWED_DOMAINS || '')
     .split(',')
     .map((domain) => domain.trim())
     .filter(Boolean);
 
-  const result = await didFetchJson('/agents/client-key', apiKey, {
-    method: 'POST',
-    body: JSON.stringify({ allowed_domains: allowedDomains.length ? allowedDomains : DEFAULT_ALLOWED_DOMAINS }),
-  });
-  const clientKey = stringField(result, 'client_key');
-  if (!clientKey) throw new Error('D-ID did not return a client key.');
-  return clientKey;
+  return allowedDomains.length ? allowedDomains : DEFAULT_ALLOWED_DOMAINS;
 }
 
 async function didFetchJson(path: string, apiKey: string, init: RequestInit) {
