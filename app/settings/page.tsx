@@ -1,6 +1,6 @@
 'use client';
 
-import { AdvancedSettingsForm, ApiKeysForm } from '@/components/SettingsForms';
+import { AdvancedSettingsForm, ApiKeysForm, SettingsResetButton } from '@/components/SettingsForms';
 import { useLanguage } from '@/lib/i18n';
 
 export default function SettingsPage() {
@@ -10,10 +10,11 @@ export default function SettingsPage() {
     <div className="page-shell settings-layout single-settings-layout">
       <section className="settings-main">
         <div className="settings-page-header">
-          <span>
+          <div className="settings-title-row">
             <h1 className="settings-title">{t('settings')}</h1>
-            <p className="subtitle">{t('dataControlCopy')}</p>
-          </span>
+            <SettingsResetButton />
+          </div>
+          <p className="subtitle">{t('dataControlCopy')}</p>
         </div>
         <div className="settings-content-grid">
           <ApiKeysForm />

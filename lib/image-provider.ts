@@ -25,23 +25,58 @@ export function buildCustomImageRequestBody(request: ImageGenerationRequest) {
 }
 
 export function buildResponsesImageRequestBody(request: ImageGenerationRequest) {
+  const input = request.sourceImageDataUrl
+    ? [{
+      role: 'user',
+      content: [
+        { type: 'input_text', text: request.prompt },
+        { type: 'input_image', image_url: request.sourceImageDataUrl },
+      ],
+    }]
+    : request.prompt;
+
   return JSON.stringify({
     model: request.model || '',
-    input: request.prompt,
+    input,
     tools: [{ type: 'image_generation' }],
   });
 }
 
 export function buildChatCompletionsImageRequestBody(request: ImageGenerationRequest) {
+  const content = request.sourceImageDataUrl
+    ? [
+      { type: 'text', text: request.prompt },
+      { type: 'image_url', image_url: { url: request.sourceImageDataUrl } },
+    ]
+    : request.prompt;
+
   return JSON.stringify({
     model: request.model || '',
-    messages: [{ role: 'user', content: request.prompt }],
+    messages: [{ role: 'user', content }],
   });
 }
 
 export function buildResponsesImageEndpoint(imageEndpoint: string) {
   const baseEndpoint = normalizeCustomImageBaseEndpoint(imageEndpoint);
   return baseEndpoint ? `${baseEndpoint}/responses` : '';
+}
+
+export function buildCustomImageEditEndpoint(imageEndpoint: string) {
+  const trimmed = imageEndpoint.trim();
+  if (!trimmed) return '';
+
+  try {
+    const url = new URL(trimmed);
+    const pathname = url.pathname.replace(/\/+$/, '');
+    if (/\/images\/edits$/i.test(pathname)) return url.toString();
+    if (/\/images\/generations$/i.test(pathname)) {
+      url.pathname = pathname.replace(/\/images\/generations$/i, '/images/edits');
+      return url.toString();
+    }
+    return trimmed;
+  } catch {
+    return trimmed;
+  }
 }
 
 export function supportsResponsesImageTool(model = '') {
@@ -115,6 +150,7 @@ function normalizeCustomImageBaseEndpoint(endpoint: string) {
   if (!trimmed) return '';
   return trimmed
     .replace(/\/images\/generations$/i, '')
+    .replace(/\/images\/edits$/i, '')
     .replace(/\/responses$/i, '');
 }
 

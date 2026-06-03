@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   buildChatCompletionsImageRequestBody,
+  buildCustomImageEditEndpoint,
   buildCustomImageRequestBody,
   buildResponsesImageEndpoint,
   buildResponsesImageRequestBody,
@@ -30,12 +31,13 @@ export async function POST(request: NextRequest) {
   if (!payload.apiKey) return NextResponse.json({ error: 'Image generation API key is missing.' }, { status: 400 });
 
   try {
-    let providerResponse = await fetch(endpoint, buildProviderRequest(payload, buildPrimaryImageRequestBody(payload)));
-    let responseEndpoint = endpoint;
+    const primaryRequest = await buildPrimaryProviderRequest(endpoint, payload);
+    let providerResponse = await fetch(primaryRequest.endpoint, primaryRequest.init);
+    let responseEndpoint = primaryRequest.endpoint;
 
     if (!providerResponse.ok) {
       const imageApiError = await readProviderError(providerResponse);
-      warnProviderFailure('image-api', endpoint, payload.model, imageApiError);
+      warnProviderFailure(primaryRequest.stage, primaryRequest.endpoint, payload.model, imageApiError);
 
       if (shouldTryResponsesFallback(payload.model, providerResponse.status, imageApiError)) {
         const responsesEndpoint = buildResponsesImageEndpoint(endpoint);
@@ -43,15 +45,16 @@ export async function POST(request: NextRequest) {
           console.info('[image-generation] trying responses fallback', safeProviderDiagnostic('responses-api', responsesEndpoint, payload.model));
           providerResponse = await fetch(
             responsesEndpoint,
-            buildProviderRequest(payload, buildResponsesImageRequestBody(payload)),
+            buildJsonProviderRequest(payload, buildResponsesImageRequestBody(payload)),
           );
           responseEndpoint = responsesEndpoint;
         }
       }
 
       if (!providerResponse.ok) {
-        const fallbackError = responseEndpoint === endpoint ? imageApiError : await readProviderError(providerResponse);
-        warnProviderFailure(responseEndpoint === endpoint ? 'image-api' : 'responses-api', responseEndpoint, payload.model, fallbackError);
+        const isPrimaryResponse = responseEndpoint === primaryRequest.endpoint;
+        const fallbackError = isPrimaryResponse ? imageApiError : await readProviderError(providerResponse);
+        warnProviderFailure(isPrimaryResponse ? primaryRequest.stage : 'responses-api', responseEndpoint, payload.model, fallbackError);
         throw new Error(fallbackError);
       }
     }
@@ -92,11 +95,21 @@ async function fetchWithStatusCheck(url: string, init: RequestInit) {
   return response;
 }
 
-function buildProviderRequest(payload: ImageGenerationRequest, body: string): RequestInit {
+function buildJsonProviderRequest(payload: ImageGenerationRequest, body: string): RequestInit {
   return {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      Authorization: `Bearer ${payload.apiKey}`,
+    },
+    body,
+  };
+}
+
+function buildMultipartProviderRequest(payload: ImageGenerationRequest, body: FormData): RequestInit {
+  return {
+    method: 'POST',
+    headers: {
       Authorization: `Bearer ${payload.apiKey}`,
     },
     body,
@@ -143,8 +156,64 @@ async function readProviderError(response: Response) {
   return `Image generation provider rejected the request (${statusLabel}): ${friendlyProviderMessage(message).slice(0, 240)}`;
 }
 
-function buildPrimaryImageRequestBody(payload: ImageGenerationRequest) {
-  return usesChatCompletionsForImages(payload.model) ? buildChatCompletionsImageRequestBody(payload) : buildCustomImageRequestBody(payload);
+async function buildPrimaryProviderRequest(endpoint: string, payload: ImageGenerationRequest) {
+  if (usesChatCompletionsForImages(payload.model)) {
+    return {
+      endpoint,
+      init: buildJsonProviderRequest(payload, buildChatCompletionsImageRequestBody(payload)),
+      stage: 'chat-completions-api',
+    };
+  }
+
+  if (payload.sourceImageDataUrl) {
+    return {
+      endpoint: buildCustomImageEditEndpoint(endpoint),
+      init: buildMultipartProviderRequest(payload, buildCustomImageEditFormData(payload)),
+      stage: 'image-edit-api',
+    };
+  }
+
+  return {
+    endpoint,
+    init: buildJsonProviderRequest(payload, buildCustomImageRequestBody(payload)),
+    stage: 'image-api',
+  };
+}
+
+function buildCustomImageEditFormData(payload: ImageGenerationRequest) {
+  const sourceImage = dataUrlToImageBlob(payload.sourceImageDataUrl || '');
+  const formData = new FormData();
+  formData.append('model', payload.model || '');
+  formData.append('prompt', payload.prompt);
+  formData.append('size', '1024x1024');
+  formData.append('n', '1');
+  formData.append('image', sourceImage.blob, sourceImage.filename);
+
+  if (normalizeModelFamily(payload.model).startsWith('gpt-image-')) {
+    formData.append('output_format', 'png');
+    formData.append('quality', 'medium');
+  } else {
+    formData.append('response_format', 'b64_json');
+  }
+
+  return formData;
+}
+
+function dataUrlToImageBlob(dataUrl: string) {
+  const match = dataUrl.match(/^data:(image\/(?:png|jpe?g|webp));base64,([A-Za-z0-9+/=\r\n]+)$/i);
+  if (!match) throw new Error('Invalid source drawing image data.');
+  const contentType = match[1].toLowerCase().replace('image/jpg', 'image/jpeg');
+  const extension = contentType === 'image/jpeg' ? 'jpg' : contentType.replace('image/', '');
+  const bytes = Buffer.from(match[2].replace(/\s+/g, ''), 'base64');
+  return {
+    blob: new Blob([bytes], { type: contentType }),
+    filename: `source-drawing.${extension}`,
+  };
+}
+
+function normalizeModelFamily(model = '') {
+  const normalized = model.trim().toLowerCase();
+  return normalized.split('/').pop() || normalized;
 }
 
 function friendlyProviderMessage(message: string) {

@@ -12,8 +12,8 @@ const SETTINGS_KEY = 'doodle-settings';
 const STARTER_DATA_CLEANUP_KEY = 'doodle-starter-data-cleaned';
 const FALLBACK_PREFIX = 'doodle-fallback-store:';
 const LEGACY_STARTER_CHARACTER_IDS = ['lumi', 'rex', 'nova', 'bamboo', 'milo', 'zara'];
-const LEGACY_PLACEHOLDER_ENDPOINT_HOSTS = ['api.your-llm-provider.com', 'api.your-image-provider.com', 'router.shengsuanyun.com'];
-const LEGACY_PLACEHOLDER_IMAGE_MODELS = ['openai/gpt-image-2'];
+const LEGACY_PLACEHOLDER_ENDPOINT_HOSTS = ['api.your-llm-provider.com', 'api.your-image-provider.com'];
+const LEGACY_PLACEHOLDER_IMAGE_MODELS: string[] = [];
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 const memoryStorage = new Map<string, string>();
@@ -88,6 +88,11 @@ export function saveSettings(settings: Partial<AdvancedSettings>) {
   if (typeof window === 'undefined') return;
   const nextSettings = normalizeSettings({ ...loadSettings(), ...settings });
   setStoredItem(SETTINGS_KEY, JSON.stringify(nextSettings));
+}
+
+export function resetSettings() {
+  if (typeof window === 'undefined') return;
+  removeStoredItem(SETTINGS_KEY);
 }
 
 export async function encryptSecret(value: string) {

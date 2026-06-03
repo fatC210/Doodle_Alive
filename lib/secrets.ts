@@ -8,13 +8,24 @@ const DID_API_KEY = 'doodle-key-did-api';
 const DID_API_KEY_VERIFIED = 'doodle-key-did-api-verified';
 const LEGACY_IMAGE_KEY = 'doodle-key-image';
 
+let customLlmKeyWriteId = 0;
+let customImageKeyWriteId = 0;
+let didApiKeyWriteId = 0;
+
 export async function loadCustomLlmKey() {
   return decryptSecret(getStoredItem(CUSTOM_LLM_KEY) || '');
 }
 
 export async function saveCustomLlmKey(value: string) {
-  if (value) setStoredItem(CUSTOM_LLM_KEY, await encryptSecret(value));
-  else removeStoredItem(CUSTOM_LLM_KEY);
+  const writeId = customLlmKeyWriteId + 1;
+  customLlmKeyWriteId = writeId;
+  if (value) {
+    const encryptedValue = await encryptSecret(value);
+    if (writeId !== customLlmKeyWriteId) return;
+    setStoredItem(CUSTOM_LLM_KEY, encryptedValue);
+  } else {
+    removeStoredItem(CUSTOM_LLM_KEY);
+  }
 }
 
 export async function loadCustomImageKey() {
@@ -42,8 +53,16 @@ export async function loadCustomImageKey() {
 }
 
 export async function saveCustomImageKey(value: string) {
-  if (value) setStoredItem(CUSTOM_IMAGE_KEY, await encryptSecret(value));
-  else removeStoredItem(CUSTOM_IMAGE_KEY);
+  const writeId = customImageKeyWriteId + 1;
+  customImageKeyWriteId = writeId;
+  const trimmedValue = value.trim();
+  if (trimmedValue) {
+    const encryptedValue = await encryptSecret(trimmedValue);
+    if (writeId !== customImageKeyWriteId) return;
+    setStoredItem(CUSTOM_IMAGE_KEY, encryptedValue);
+  } else {
+    removeStoredItem(CUSTOM_IMAGE_KEY);
+  }
   removeStoredItem(LEGACY_IMAGE_KEY);
   clearLegacyImageSettings(loadSettings() as ReturnType<typeof loadSettings> & { imageApiKey?: string });
 }
@@ -53,9 +72,14 @@ export async function loadDidApiKey() {
 }
 
 export async function saveDidApiKey(value: string) {
+  const writeId = didApiKeyWriteId + 1;
+  didApiKeyWriteId = writeId;
   const trimmedValue = value.trim();
-  if (trimmedValue) setStoredItem(DID_API_KEY, await encryptSecret(trimmedValue));
-  else {
+  if (trimmedValue) {
+    const encryptedValue = await encryptSecret(trimmedValue);
+    if (writeId !== didApiKeyWriteId) return;
+    setStoredItem(DID_API_KEY, encryptedValue);
+  } else {
     removeStoredItem(DID_API_KEY);
     removeStoredItem(DID_API_KEY_VERIFIED);
   }
@@ -69,7 +93,9 @@ export async function isDidApiKeyVerified(value: string) {
 
 export async function markDidApiKeyVerified(value: string) {
   const trimmedValue = value.trim();
-  if (trimmedValue) setStoredItem(DID_API_KEY_VERIFIED, await digestSecret(trimmedValue));
+  if (trimmedValue && await loadDidApiKey() === trimmedValue) {
+    setStoredItem(DID_API_KEY_VERIFIED, await digestSecret(trimmedValue));
+  }
 }
 
 function clearLegacyImageSettings(settings: ReturnType<typeof loadSettings> & { imageApiKey?: string }) {

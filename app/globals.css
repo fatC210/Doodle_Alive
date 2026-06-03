@@ -1071,13 +1071,17 @@ main { position: relative; z-index: 1; }
 .privacy-box b { color: var(--purple); }
 .settings-main { padding: 18px 0 0; }
 .settings-page-header {
+  margin-bottom: 16px;
+}
+.settings-title-row {
   display: flex;
   justify-content: space-between;
   gap: 18px;
-  align-items: end;
-  margin-bottom: 16px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 .settings-title { font-size: 30px; margin-bottom: 4px; }
+.settings-title-row .settings-title { margin-bottom: 0; }
 .settings-page-header .subtitle,
 .settings-section .subtitle {
   font-size: 14px;
@@ -1519,6 +1523,11 @@ main { position: relative; z-index: 1; }
   .style-grid, .persona-grid, .feature-strip, .plan-grid { grid-template-columns: repeat(2, 1fr); }
   .character-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 320px)); }
   .preview-panel { position: static; }
+}
+@media (min-width: 1121px) and (max-width: 1280px) {
+  .style-panel-actions {
+    grid-template-columns: 1fr;
+  }
 }
 @media (max-width: 720px) {
   .page-shell { width: min(calc(100% - 18px), var(--page-max)); }

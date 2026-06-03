@@ -1,12 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { generateRandomCharacterName } from '../lib/character-name';
 import { getMorphingConfigIssues } from '../lib/config-requirements';
-import { defaultSettings, styles } from '../lib/data';
+import { defaultSettings, personas, pickRandomPersona, styles } from '../lib/data';
+import { buildAgentPayload } from '../lib/did-agent-server';
 import { canMove, getCreationResumePath, nextStep, previousStep } from '../lib/flow';
 import { buildCustomImageRequestBody, normalizeCustomImageEndpoint } from '../lib/image-gen';
-import { buildChatCompletionsImageRequestBody, extractImageDataUrl, extractImageUrl } from '../lib/image-provider';
+import { buildChatCompletionsImageRequestBody, buildCustomImageEditEndpoint, buildResponsesImageRequestBody, extractImageDataUrl, extractImageUrl } from '../lib/image-provider';
 import { buildImagePrompt, extractAccentColors, hasVisibleCanvasContent } from '../lib/prompt';
-import { clearDraft, dataUrlToBlob, loadDraft, saveDraft } from '../lib/storage';
+import { clearDraft, dataUrlToBlob, loadDraft, loadSettings, resetSettings, saveDraft, saveSettings } from '../lib/storage';
 
 describe('creation flow state machine', () => {
   test('moves forward one step and allows recovery to DRAW', () => {
@@ -35,6 +36,14 @@ describe('required API configuration checks', () => {
     ]);
   });
 
+  test('treats whitespace-only keys as missing', () => {
+    expect(getMorphingConfigIssues(defaultSettings, '   ')).toEqual([
+      'customImageEndpoint',
+      'customImageModel',
+      'customImageKey',
+    ]);
+  });
+
 });
 
 describe('character naming', () => {
@@ -44,6 +53,66 @@ describe('character naming', () => {
 
     expect(generateRandomCharacterName('en', () => englishValues.shift() ?? 0)).toBe('Milo');
     expect(generateRandomCharacterName('zh', () => chineseValues.shift() ?? 0)).toBe('\u6674\u6674');
+  });
+});
+
+describe('D-ID agent payload', () => {
+  test('uses photo avatar presenter with default OpenAI llm provider', () => {
+    const payload = buildAgentPayload({ characterName: 'Milo' }, 'https://example.com/milo.png');
+
+    expect(payload.presenter).toMatchObject({
+      type: 'talk',
+      source_url: 'https://example.com/milo.png',
+      thumbnail: 'https://example.com/milo.png',
+    });
+    expect(payload.llm).toMatchObject({ provider: 'openai', model: 'gpt-4.1-mini' });
+  });
+
+  test('uses expressive presenter only when D-ID llm provider is explicitly configured', () => {
+    const originalProvider = process.env.DID_LLM_PROVIDER;
+    process.env.DID_LLM_PROVIDER = 'd-id';
+
+    try {
+      const payload = buildAgentPayload({ characterName: 'Milo' }, 'https://example.com/milo.png');
+
+      expect(payload.presenter).toMatchObject({ type: 'expressive', presenter_id: 'public_mia_elegant@avt_TJ0Tq5' });
+      expect(payload.presenter).not.toHaveProperty('source_url');
+      expect(payload.llm).toMatchObject({ provider: 'd-id', model: 'gpt-oss-120b' });
+    } finally {
+      if (originalProvider === undefined) delete process.env.DID_LLM_PROVIDER;
+      else process.env.DID_LLM_PROVIDER = originalProvider;
+    }
+  });
+
+  test('ignores stale D-ID-only model when using default OpenAI llm provider', () => {
+    const originalProvider = process.env.DID_LLM_PROVIDER;
+    const originalModel = process.env.DID_LLM_MODEL;
+    delete process.env.DID_LLM_PROVIDER;
+    process.env.DID_LLM_MODEL = 'gpt-oss-120b';
+
+    try {
+      const payload = buildAgentPayload({ characterName: 'Milo' }, 'https://example.com/milo.png');
+
+      expect(payload.presenter).toMatchObject({ type: 'talk' });
+      expect(payload.llm).toMatchObject({ provider: 'openai', model: 'gpt-4.1-mini' });
+    } finally {
+      if (originalProvider === undefined) delete process.env.DID_LLM_PROVIDER;
+      else process.env.DID_LLM_PROVIDER = originalProvider;
+      if (originalModel === undefined) delete process.env.DID_LLM_MODEL;
+      else process.env.DID_LLM_MODEL = originalModel;
+    }
+  });
+
+  test('random persona resolves to a concrete supported persona', () => {
+    const originalRandom = Math.random;
+    Math.random = () => 0.999;
+
+    try {
+      expect(pickRandomPersona().id).not.toBe('random');
+      expect(personas.some((persona) => persona.id === 'random')).toBe(true);
+    } finally {
+      Math.random = originalRandom;
+    }
   });
 });
 
@@ -226,6 +295,54 @@ describe('OpenAI-compatible image request body', () => {
     });
   });
 
+  test('includes the source drawing in chat completions image requests', () => {
+    const sourceImageDataUrl = 'data:image/png;base64,ZmFrZS1kcmF3aW5n';
+    const body = buildChatCompletionsImageRequestBody({
+      provider: 'custom',
+      model: 'gemini-3-pro-image-preview-4k',
+      prompt: 'keep the doodle pose',
+      sourceImageDataUrl,
+    });
+
+    expect(JSON.parse(body)).toEqual({
+      model: 'gemini-3-pro-image-preview-4k',
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'keep the doodle pose' },
+          { type: 'image_url', image_url: { url: sourceImageDataUrl } },
+        ],
+      }],
+    });
+  });
+
+  test('includes the source drawing in responses image requests', () => {
+    const sourceImageDataUrl = 'data:image/png;base64,ZmFrZS1kcmF3aW5n';
+    const body = buildResponsesImageRequestBody({
+      provider: 'custom',
+      model: 'provider-image-model',
+      prompt: 'keep the doodle colors',
+      sourceImageDataUrl,
+    });
+
+    expect(JSON.parse(body)).toEqual({
+      model: 'provider-image-model',
+      input: [{
+        role: 'user',
+        content: [
+          { type: 'input_text', text: 'keep the doodle colors' },
+          { type: 'input_image', image_url: sourceImageDataUrl },
+        ],
+      }],
+      tools: [{ type: 'image_generation' }],
+    });
+  });
+
+  test('normalizes image generation URLs to image edit URLs', () => {
+    expect(buildCustomImageEditEndpoint('https://api.example.com/v1/images/generations')).toBe('https://api.example.com/v1/images/edits');
+    expect(buildCustomImageEditEndpoint('https://api.example.com/v1/images/edits')).toBe('https://api.example.com/v1/images/edits');
+  });
+
   test('extracts image URLs from common OpenAI-compatible router response shapes', () => {
     expect(extractImageUrl({ images: [{ imageUrl: 'https://cdn.example.com/a.png' }] })).toBe('https://cdn.example.com/a.png');
     expect(extractImageUrl({ result: { data: [{ image_url: 'https://cdn.example.com/b.png' }] } })).toBe('https://cdn.example.com/b.png');
@@ -242,6 +359,35 @@ describe('OpenAI-compatible image request body', () => {
 });
 
 describe('draft storage', () => {
+  test('persists Shengsuanyun image endpoint and OpenAI-prefixed model names', () => {
+    const stored = new Map<string, string>();
+    const originalWindow = globalThis.window;
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        localStorage: {
+          getItem: (key: string) => stored.get(key) ?? null,
+          removeItem: (key: string) => stored.delete(key),
+          setItem: (key: string, value: string) => stored.set(key, value),
+        },
+      },
+    });
+
+    try {
+      resetSettings();
+      saveSettings({
+        customImageEndpoint: 'https://router.shengsuanyun.com/api/v1',
+        customImageModel: 'openai/gpt-image-2',
+      });
+
+      expect(loadSettings().customImageEndpoint).toBe('https://router.shengsuanyun.com/api/v1');
+      expect(loadSettings().customImageModel).toBe('openai/gpt-image-2');
+    } finally {
+      resetSettings();
+      Object.defineProperty(globalThis, 'window', { configurable: true, value: originalWindow });
+    }
+  });
+
   test('converts base64 data URLs to typed blobs without fetch', async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (() => { throw new Error('fetch should not be called'); }) as typeof fetch;

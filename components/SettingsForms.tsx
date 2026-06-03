@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Check, RotateCcw } from 'lucide-react';
+import { getMorphingConfigIssues } from '@/lib/config-requirements';
 import { defaultSettings } from '@/lib/data';
 import { useLanguage } from '@/lib/i18n';
 import {
@@ -9,10 +10,11 @@ import {
   loadCustomImageKey,
   loadDidApiKey,
   markDidApiKeyVerified,
+  saveCustomLlmKey,
   saveCustomImageKey,
   saveDidApiKey,
 } from '@/lib/secrets';
-import { loadSettings, saveSettings } from '@/lib/storage';
+import { loadSettings, resetSettings, saveSettings } from '@/lib/storage';
 import { useTheme } from '@/lib/theme';
 import type { AdvancedSettings, ApiKeyStatus } from '@/lib/types';
 
@@ -20,34 +22,70 @@ type ImageProviderStatus = {
   status: ApiKeyStatus;
 };
 
+const SETTINGS_RESET_EVENT = 'doodle-settings-reset';
+
+export function SettingsResetButton() {
+  const { t, setLanguage } = useLanguage();
+  const { setTheme } = useTheme();
+
+  async function resetAllConfiguration() {
+    resetSettings();
+    await Promise.all([
+      saveCustomImageKey(''),
+      saveCustomLlmKey(''),
+      saveDidApiKey(''),
+    ]);
+    setLanguage(defaultSettings.language);
+    setTheme('light');
+    window.dispatchEvent(new Event(SETTINGS_RESET_EVENT));
+  }
+
+  return (
+    <button className="ghost-button" type="button" onClick={() => void resetAllConfiguration()}>
+      <RotateCcw size={16} /> {t('resetDefaults')}
+    </button>
+  );
+}
+
 export function ApiKeysForm() {
   const { t } = useLanguage();
   const [didApiKey, setDidApiKey] = useState('');
   const [didStatus, setDidStatus] = useState<ApiKeyStatus>('missing');
   const [testingDidKey, setTestingDidKey] = useState(false);
+  const didValidationIdRef = useRef(0);
 
   useEffect(() => {
     async function load() {
+      didValidationIdRef.current += 1;
       const loadedDidApiKey = await loadDidApiKey();
       setDidApiKey(loadedDidApiKey);
       setDidStatus(await getDidStatusForKey(loadedDidApiKey));
+      setTestingDidKey(false);
     }
-    load();
+    void load();
+    const handleSettingsReset = () => void load();
+    window.addEventListener(SETTINGS_RESET_EVENT, handleSettingsReset);
+    return () => window.removeEventListener(SETTINGS_RESET_EVENT, handleSettingsReset);
   }, []);
 
   function updateDidApiKey(value: string) {
+    didValidationIdRef.current += 1;
     setDidApiKey(value);
     setDidStatus(value.trim() ? 'untested' : 'missing');
   }
 
   async function saveAndValidateDidKey() {
+    const validationId = didValidationIdRef.current + 1;
+    didValidationIdRef.current = validationId;
     const nextKey = didApiKey.trim();
     await saveDidApiKey(nextKey);
+    if (validationId !== didValidationIdRef.current) return;
     if (!nextKey) {
       setDidStatus('missing');
       return;
     }
     if (await isDidApiKeyVerified(nextKey)) {
+      if (validationId !== didValidationIdRef.current) return;
       setDidStatus('valid');
       return;
     }
@@ -60,16 +98,19 @@ export function ApiKeysForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ apiKey: nextKey }),
       });
+      if (validationId !== didValidationIdRef.current) return;
       if (response.ok) {
         await markDidApiKeyVerified(nextKey);
+        if (validationId !== didValidationIdRef.current) return;
         setDidStatus('valid');
       } else {
         setDidStatus('invalid');
       }
     } catch {
+      if (validationId !== didValidationIdRef.current) return;
       setDidStatus('invalid');
     } finally {
-      setTestingDidKey(false);
+      if (validationId === didValidationIdRef.current) setTestingDidKey(false);
     }
   }
 
@@ -124,7 +165,10 @@ export function AdvancedSettingsForm() {
       setCustomImageKey(loadedCustomImageKey);
       setImageProviderStatus({ status: hasCompleteImageProviderConfig(loadedSettings, loadedCustomImageKey) ? 'valid' : 'missing' });
     }
-    load();
+    void load();
+    const handleSettingsReset = () => void load();
+    window.addEventListener(SETTINGS_RESET_EVENT, handleSettingsReset);
+    return () => window.removeEventListener(SETTINGS_RESET_EVENT, handleSettingsReset);
   }, []);
 
   function update<K extends keyof AdvancedSettings>(key: K, value: AdvancedSettings[K]) {
@@ -138,21 +182,24 @@ export function AdvancedSettingsForm() {
   function updateCustomImageSetting<K extends 'customImageEndpoint' | 'customImageModel'>(key: K, value: AdvancedSettings[K]) {
     const nextSettings = { ...settings, [key]: value };
     setSettings(nextSettings);
+    saveSettings({ [key]: value } as Partial<AdvancedSettings>);
     setImageProviderStatus({ status: hasCompleteImageProviderConfig(nextSettings, customImageKey) ? 'untested' : 'missing' });
   }
 
   function updateCustomImageKey(value: string) {
     setCustomImageKey(value);
     setImageProviderStatus({ status: hasCompleteImageProviderConfig(settings, value) ? 'untested' : 'missing' });
+    void saveCustomImageKey(value);
   }
 
   async function saveCustomImageProvider(next?: Partial<Pick<AdvancedSettings, 'customImageEndpoint' | 'customImageModel'>> & { customImageKey?: string }) {
-    const nextSettings = {
+    const draftSettings = {
       ...settings,
       customImageEndpoint: next?.customImageEndpoint ?? settings.customImageEndpoint,
       customImageModel: next?.customImageModel ?? settings.customImageModel,
     };
-    const nextCustomImageKey = next?.customImageKey ?? customImageKey;
+    const nextCustomImageKey = (next?.customImageKey ?? customImageKey).trim();
+    const nextSettings = draftSettings;
 
     setSettings(nextSettings);
     setCustomImageKey(nextCustomImageKey);
@@ -170,16 +217,6 @@ export function AdvancedSettingsForm() {
     setImageProviderStatus({ status: 'valid' });
   }
 
-  function reset() {
-    setSettings(defaultSettings);
-    setCustomImageKey('');
-    void saveCustomImageKey('');
-    saveSettings(defaultSettings);
-    setImageProviderStatus({ status: 'missing' });
-    setLanguage(defaultSettings.language);
-    setTheme('light');
-  }
-
   return (
     <section className="settings-section card">
       <div className="settings-section-header">
@@ -187,7 +224,6 @@ export function AdvancedSettingsForm() {
           <h2>{t('advancedConfig')}</h2>
           <p className="subtitle">{t('advancedConfigCopy')}</p>
         </span>
-        <button className="ghost-button" onClick={reset}><RotateCcw size={16} /> {t('resetDefaults')}</button>
       </div>
       <div className="advanced-content">
         <section className="config-section">
@@ -271,11 +307,7 @@ export function AdvancedSettingsForm() {
 }
 
 function hasCompleteImageProviderConfig(settings: AdvancedSettings, customImageKey: string) {
-  return Boolean(
-    settings.customImageEndpoint.trim()
-    && settings.customImageModel.trim()
-    && customImageKey.trim(),
-  );
+  return getMorphingConfigIssues(settings, customImageKey).length === 0;
 }
 
 function statusLabel(status: string, t: ReturnType<typeof useLanguage>['t']) {

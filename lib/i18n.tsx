@@ -79,7 +79,7 @@ const translations = {
     brushSizeAria: 'Brush size',
     setBackground: 'Set background',
 
-    chooseStyle: 'Choose a style',
+    chooseStyle: 'Choose a Style',
     chooseStyleCopy: 'Pick a style to transform your drawing into something amazing.',
     random: 'Random',
     yourPreview: 'Your Preview',
@@ -87,7 +87,7 @@ const translations = {
     selectedStyle: 'Selected Style',
     styleReadyCopy: 'Ready for the next step.',
     bringToLife: 'Bring to Life',
-    previousStep: 'Previous step',
+    previousStep: 'Previous Step',
     back: 'Back',
     step2Of4: 'Step 2 of 4',
     nextDetails: 'Next: Details',
@@ -128,7 +128,7 @@ const translations = {
     continueFinal: 'Continue to Final Touches',
     validationInfo: 'If validation fails, you can redraw or change style to get a better result.',
 
-    choosePersonality: 'Choose a personality',
+    choosePersonality: 'Choose a Personality',
     choosePersonalityCopy: 'Personality controls how your character talks, reacts, and expresses themselves.',
     characterName: 'Character name',
     characterNamePlaceholder: 'Give your character a name',

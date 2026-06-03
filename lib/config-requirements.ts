@@ -7,8 +7,8 @@ export type ConfigIssue =
 
 export function getMorphingConfigIssues(settings: AdvancedSettings, customImageKey: string): ConfigIssue[] {
   return [
-    settings.customImageEndpoint ? null : 'customImageEndpoint',
-    settings.customImageModel ? null : 'customImageModel',
-    customImageKey ? null : 'customImageKey',
+    settings.customImageEndpoint.trim() ? null : 'customImageEndpoint',
+    settings.customImageModel.trim() ? null : 'customImageModel',
+    customImageKey.trim() ? null : 'customImageKey',
   ].filter(Boolean) as ConfigIssue[];
 }
