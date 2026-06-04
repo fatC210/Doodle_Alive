@@ -2,11 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { generateRandomCharacterName } from '../lib/character-name';
 import { getMorphingConfigIssues } from '../lib/config-requirements';
 import { defaultSettings, personas, pickRandomPersona, styles } from '../lib/data';
-import { buildAgentClientKeyPath, buildAgentPayload, readDidImageUploadUrl, refreshDidAgentClientKey } from '../lib/did-agent-server';
+import { buildAgentClientKeyPath, buildAgentPayload, provisionDidAgent, readDidImageUploadUrl, refreshDidAgentClientKey } from '../lib/did-agent-server';
 import { canMove, getCreationResumePath, nextStep, previousStep } from '../lib/flow';
 import { buildCustomImageRequestBody, normalizeCustomImageEndpoint } from '../lib/image-gen';
 import { buildChatCompletionsImageRequestBody, buildCustomImageEditEndpoint, buildCustomImageEditJsonRequestBody, buildResponsesImageRequestBody, extractImageDataUrl, extractImageUrl, usesJsonImageEditPayload } from '../lib/image-provider';
 import { buildImagePrompt, extractAccentColors, hasVisibleCanvasContent } from '../lib/prompt';
+import { resolvePublicImageUrl } from '../lib/public-image-hosting';
 import { clearDraft, dataUrlToBlob, decryptSecret, encryptSecret, isCurrentSecretCipher, loadDraft, loadSettings, resetSettings, saveDraft, saveSettings } from '../lib/storage';
 
 describe('creation flow state machine', () => {
@@ -102,20 +103,67 @@ describe('D-ID agent payload', () => {
     expect(payload.llm).toMatchObject({ provider: 'openai', model: 'gpt-4.1-mini' });
   });
 
-  test('uses a browser-loadable poster when D-ID stores the source image internally', () => {
+  test('rejects internal D-ID image URLs for talk presenters', () => {
     const dataUrl = 'data:image/png;base64,avatar';
-    const payload = buildAgentPayload({ characterName: 'Milo', imageDataUrl: dataUrl }, 's3://d-id-images-prod/user/avatar.png', dataUrl);
-
-    expect(payload.presenter).toMatchObject({
-      type: 'talk',
-      source_url: 's3://d-id-images-prod/user/avatar.png',
-      thumbnail: dataUrl,
-    });
+    expect(() => buildAgentPayload({ characterName: 'Milo', imageDataUrl: dataUrl }, 's3://d-id-images-prod/user/avatar.png', dataUrl)).toThrow('HTTP(S) source image');
   });
 
-  test('prefers public HTTP image upload URLs over internal S3 URLs', () => {
+  test('uses only public HTTP image upload URLs', () => {
     expect(readDidImageUploadUrl({ url: 's3://d-id-images-prod/internal.png', download_url: 'https://cdn.example.com/avatar.png' })).toBe('https://cdn.example.com/avatar.png');
-    expect(readDidImageUploadUrl({ url: 's3://d-id-images-prod/internal.png' })).toBe('s3://d-id-images-prod/internal.png');
+    expect(readDidImageUploadUrl({ url: 's3://d-id-images-prod/internal.png' })).toBe('');
+  });
+
+  test('uses public image URLs directly instead of uploading browser previews', async () => {
+    const originalFetch = globalThis.fetch;
+    const requests: Array<{ url: string; method?: string; body?: BodyInit | null }> = [];
+    globalThis.fetch = (async (input, init) => {
+      requests.push({ url: String(input), method: init?.method, body: init?.body });
+      if (String(input).endsWith('/agents')) return new Response(JSON.stringify({ id: 'v2_agt_example', presenter: {} }), { status: 200 });
+      return new Response(JSON.stringify({ client_key: 'ck_test' }), { status: 200 });
+    }) as typeof fetch;
+
+    try {
+      const result = await provisionDidAgent({
+        characterId: 'character-1',
+        characterName: 'Milo',
+        imageDataUrl: 'data:image/png;base64,avatar',
+        imageUrl: 'https://cdn.example.com/avatar.png',
+        apiKey: 'test-key',
+        allowedDomains: 'http://localhost:3000',
+      });
+
+      expect(result.sourceUrl).toBe('https://cdn.example.com/avatar.png');
+      expect(requests.map((request) => request.url)).not.toContain('https://api.d-id.com/images');
+      expect(JSON.parse(String(requests[0].body))).toMatchObject({
+        presenter: {
+          source_url: 'https://cdn.example.com/avatar.png',
+          thumbnail: 'https://cdn.example.com/avatar.png',
+        },
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('falls back to an existing public URL when Blob hosting is not configured', async () => {
+    const originalToken = process.env.BLOB_READ_WRITE_TOKEN;
+    const originalStoreId = process.env.BLOB_STORE_ID;
+    delete process.env.BLOB_READ_WRITE_TOKEN;
+    delete process.env.BLOB_STORE_ID;
+
+    try {
+      await expect(resolvePublicImageUrl({
+        characterId: 'character-1',
+        imageDataUrl: 'data:image/png;base64,avatar',
+        imageUrl: 'https://cdn.example.com/avatar.png',
+      })).resolves.toBe('https://cdn.example.com/avatar.png');
+      await expect(resolvePublicImageUrl({ imageDataUrl: 'data:image/png;base64,avatar' })).resolves.toBe('');
+    } finally {
+      if (originalToken === undefined) delete process.env.BLOB_READ_WRITE_TOKEN;
+      else process.env.BLOB_READ_WRITE_TOKEN = originalToken;
+      if (originalStoreId === undefined) delete process.env.BLOB_STORE_ID;
+      else process.env.BLOB_STORE_ID = originalStoreId;
+    }
   });
 
   test('localizes D-ID greeting, instructions, and default voice from UI language', () => {

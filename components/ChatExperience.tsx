@@ -45,7 +45,9 @@ export function ChatExperience({ characterId }: { characterId: string }) {
   const displayPersonaName = display ? getLocalizedPersonaName(display, language) : '';
   const chatTheme = useMemo(() => display ? getCharacterChatTheme(display) : undefined, [display]);
   const chatThemeClass = display ? `theme-${normalizeThemeName(display.tone || display.styleId)}` : '';
-  const didAgentConfig = getDidAgentEmbedConfig({ agentId: display?.didAgentId, clientKey: display?.didClientKey });
+  const didAgentConfig = hasBrowserLoadableDidAgentImage(display)
+    ? getDidAgentEmbedConfig({ agentId: display?.didAgentId, clientKey: display?.didClientKey })
+    : null;
   const voiceState = voiceSession.characterId === characterId ? voiceSession.state : 'idle';
   const voiceStatusClass = getVoiceStatusClass(Boolean(didAgentConfig), voiceState);
   const voiceStatusLabel = getVoiceStatusLabel(Boolean(didAgentConfig), voiceState, t);
@@ -233,9 +235,18 @@ async function repairStoredDidAgentPoster(character: DoodleCharacter, language: 
 }
 
 function needsDidAgentPosterRepair(character: DoodleCharacter) {
-  if (!character.didAgentId || character.didPosterUrl) return false;
-  if (!character.didSourceUrl?.startsWith('s3://')) return false;
+  if (!character.didAgentId) return false;
+  if (!usesInternalDidImageUrl(character)) return false;
   return Boolean(character.generatedDataUrl?.startsWith('data:image/') || isHttpUrl(character.generatedImageUrl));
+}
+
+function hasBrowserLoadableDidAgentImage(character: DoodleCharacter | null) {
+  if (!character?.didAgentId || !character.didClientKey) return false;
+  return !usesInternalDidImageUrl(character);
+}
+
+function usesInternalDidImageUrl(character: DoodleCharacter) {
+  return Boolean(character.didSourceUrl?.startsWith('s3://') || character.didPosterUrl?.startsWith('s3://'));
 }
 
 async function patchDidAgentPoster(character: DoodleCharacter, language: string) {

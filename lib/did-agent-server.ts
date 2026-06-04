@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { resolvePublicImageUrl } from '@/lib/public-image-hosting';
 
 const DID_API_BASE_URL = 'https://api.d-id.com';
 const DEFAULT_DID_LLM_PROVIDER = 'openai';
@@ -79,34 +80,16 @@ export function didErrorResponse(error: unknown) {
 }
 
 async function uploadImage(payload: DidRequestBody, apiKey: string) {
+  const publicImageUrl = await resolvePublicImageUrl({
+    characterId: payload.characterId,
+    imageDataUrl: payload.imageDataUrl,
+    imageUrl: payload.imageUrl,
+  });
+  if (publicImageUrl) return publicImageUrl;
+
   if (payload.imageDataUrl) return uploadImageDataUrl(payload.imageDataUrl, apiKey, payload.characterId);
-  if (payload.imageUrl) return uploadImageUrl(payload.imageUrl, apiKey);
+  if (payload.imageUrl) throw new Error('D-ID avatar image URL must be an HTTP(S) URL.');
   throw new Error('Missing generated image for D-ID avatar.');
-}
-
-async function uploadImageUrl(imageUrl: string, apiKey: string) {
-  if (!isHttpUrl(imageUrl)) throw new Error('D-ID avatar image URL must be an HTTP(S) URL.');
-
-  const response = await fetch(imageUrl);
-  if (!response.ok) {
-    throw new Error(`D-ID avatar image URL could not be downloaded (${response.status}).`);
-  }
-
-  const contentType = response.headers.get('content-type') || '';
-  if (!contentType.startsWith('image/')) {
-    throw new Error('D-ID avatar image URL did not point to an image.');
-  }
-
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  const extension = contentType === 'image/jpeg' ? 'jpg' : contentType === 'image/png' ? 'png' : contentType.replace('image/', '') || 'png';
-  const filename = safeFilename(`character.${extension}`);
-  const formData = new FormData();
-  formData.append('image', new Blob([bytes], { type: contentType }), filename);
-
-  const result = await didFetchJson('/images', apiKey, { method: 'POST', body: formData });
-  const url = readDidImageUploadUrl(result);
-  if (!url) throw new Error('D-ID image upload did not return a URL.');
-  return url;
 }
 
 async function uploadImageDataUrl(imageDataUrl: string, apiKey: string, characterId: string | undefined) {
@@ -122,7 +105,7 @@ async function uploadImageDataUrl(imageDataUrl: string, apiKey: string, characte
 
   const result = await didFetchJson('/images', apiKey, { method: 'POST', body: formData });
   const url = readDidImageUploadUrl(result);
-  if (!url) throw new Error('D-ID image upload did not return a URL.');
+  if (!url) throw new Error('D-ID image upload did not return a browser-loadable HTTP(S) URL. Configure Vercel Blob storage or use an image provider that returns a public HTTPS image URL, then recreate the character.');
   return url;
 }
 
@@ -148,6 +131,10 @@ function buildPresenterConfig(llmProvider: string, sourceUrl: string, posterUrl:
     };
   }
 
+  if (!isHttpUrl(sourceUrl)) {
+    throw new Error('D-ID talk presenter requires a browser-loadable HTTP(S) source image. Configure Vercel Blob storage or use an image provider that returns a public HTTPS image URL, then recreate the character.');
+  }
+
   return {
     type: 'talk',
     source_url: sourceUrl,
@@ -158,8 +145,9 @@ function buildPresenterConfig(llmProvider: string, sourceUrl: string, posterUrl:
 }
 
 function resolvePresenterPosterUrl(payload: DidRequestBody, sourceUrl: string) {
-  if (payload.imageDataUrl?.startsWith('data:image/')) return payload.imageDataUrl;
+  if (isHttpUrl(sourceUrl)) return sourceUrl;
   if (payload.imageUrl && isHttpUrl(payload.imageUrl)) return payload.imageUrl;
+  if (payload.imageDataUrl?.startsWith('data:image/')) return payload.imageDataUrl;
   return sourceUrl;
 }
 
@@ -175,7 +163,7 @@ export function readDidImageUploadUrl(data: DidJson) {
     stringField(data, 'uri'),
   ].filter(Boolean);
 
-  return candidates.find(isHttpUrl) || candidates.find((value) => value.startsWith('s3://')) || '';
+  return candidates.find(isHttpUrl) || '';
 }
 
 function buildLlmConfig(payload: DidRequestBody) {
