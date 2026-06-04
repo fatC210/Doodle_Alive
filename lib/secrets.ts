@@ -1,6 +1,6 @@
 'use client';
 
-import { decryptSecret, encryptSecret, getStoredItem, loadSettings, removeStoredItem, saveSettings, setStoredItem } from './storage';
+import { decryptSecret, encryptSecret, getStoredItem, isCurrentSecretCipher, loadSettings, removeStoredItem, saveSettings, setStoredItem } from './storage';
 
 const CUSTOM_LLM_KEY = 'doodle-key-custom-llm';
 const CUSTOM_IMAGE_KEY = 'doodle-key-custom-image';
@@ -13,7 +13,11 @@ let customImageKeyWriteId = 0;
 let didApiKeyWriteId = 0;
 
 export async function loadCustomLlmKey() {
-  return decryptSecret(getStoredItem(CUSTOM_LLM_KEY) || '');
+  const stored = getStoredItem(CUSTOM_LLM_KEY);
+  if (!stored) return '';
+  const value = await decryptSecret(stored);
+  if (value && !isCurrentSecretCipher(stored)) await saveCustomLlmKey(value);
+  return value;
 }
 
 export async function saveCustomLlmKey(value: string) {
@@ -30,7 +34,11 @@ export async function saveCustomLlmKey(value: string) {
 
 export async function loadCustomImageKey() {
   const stored = getStoredItem(CUSTOM_IMAGE_KEY);
-  if (stored) return decryptSecret(stored);
+  if (stored) {
+    const value = await decryptSecret(stored);
+    if (value && !isCurrentSecretCipher(stored)) await saveCustomImageKey(value);
+    return value;
+  }
 
   const legacyStored = getStoredItem(LEGACY_IMAGE_KEY);
   if (legacyStored) {
@@ -68,7 +76,11 @@ export async function saveCustomImageKey(value: string) {
 }
 
 export async function loadDidApiKey() {
-  return decryptSecret(getStoredItem(DID_API_KEY) || '');
+  const stored = getStoredItem(DID_API_KEY);
+  if (!stored) return '';
+  const value = await decryptSecret(stored);
+  if (value && !isCurrentSecretCipher(stored)) await saveDidApiKey(value);
+  return value;
 }
 
 export async function saveDidApiKey(value: string) {

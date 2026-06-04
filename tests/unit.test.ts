@@ -2,12 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { generateRandomCharacterName } from '../lib/character-name';
 import { getMorphingConfigIssues } from '../lib/config-requirements';
 import { defaultSettings, personas, pickRandomPersona, styles } from '../lib/data';
-import { buildAgentClientKeyPath, buildAgentPayload } from '../lib/did-agent-server';
+import { buildAgentClientKeyPath, buildAgentPayload, refreshDidAgentClientKey } from '../lib/did-agent-server';
 import { canMove, getCreationResumePath, nextStep, previousStep } from '../lib/flow';
 import { buildCustomImageRequestBody, normalizeCustomImageEndpoint } from '../lib/image-gen';
 import { buildChatCompletionsImageRequestBody, buildCustomImageEditEndpoint, buildCustomImageEditJsonRequestBody, buildResponsesImageRequestBody, extractImageDataUrl, extractImageUrl, usesJsonImageEditPayload } from '../lib/image-provider';
 import { buildImagePrompt, extractAccentColors, hasVisibleCanvasContent } from '../lib/prompt';
-import { clearDraft, dataUrlToBlob, loadDraft, loadSettings, resetSettings, saveDraft, saveSettings } from '../lib/storage';
+import { clearDraft, dataUrlToBlob, decryptSecret, encryptSecret, isCurrentSecretCipher, loadDraft, loadSettings, resetSettings, saveDraft, saveSettings } from '../lib/storage';
 
 describe('creation flow state machine', () => {
   test('moves forward one step and allows recovery to DRAW', () => {
@@ -63,6 +63,34 @@ describe('D-ID agent payload', () => {
     expect(() => buildAgentClientKeyPath('  ')).toThrow('D-ID Agent id is missing');
   });
 
+  test('refreshes client keys without mutating the agent presenter', async () => {
+    const originalFetch = globalThis.fetch;
+    const requests: Array<{ url: string; method?: string; body?: BodyInit | null }> = [];
+    globalThis.fetch = (async (input, init) => {
+      requests.push({ url: String(input), method: init?.method, body: init?.body });
+      return new Response(JSON.stringify({ client_key: 'ck_test' }), { status: 200 });
+    }) as typeof fetch;
+
+    try {
+      const result = await refreshDidAgentClientKey({
+        agentId: 'v2_agt_example',
+        apiKey: 'test-key',
+        allowedDomains: 'http://localhost:3000',
+        sourceUrl: 'https://example.com/avatar.png',
+      });
+
+      expect(result).toEqual({ clientKey: 'ck_test' });
+      expect(requests).toHaveLength(1);
+      expect(requests[0]).toMatchObject({
+        url: 'https://api.d-id.com/agents/v2_agt_example/client-keys',
+        method: 'POST',
+      });
+      expect(String(requests[0].body)).toContain('allowed_domains');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   test('uses photo avatar presenter with default OpenAI llm provider', () => {
     const payload = buildAgentPayload({ characterName: 'Milo' }, 'https://example.com/milo.png');
 
@@ -72,6 +100,28 @@ describe('D-ID agent payload', () => {
       thumbnail: 'https://example.com/milo.png',
     });
     expect(payload.llm).toMatchObject({ provider: 'openai', model: 'gpt-4.1-mini' });
+  });
+
+  test('localizes D-ID greeting, instructions, and default voice from UI language', () => {
+    const originalVoice = process.env.DID_MICROSOFT_VOICE_ID;
+    const originalChineseVoice = process.env.DID_MICROSOFT_VOICE_ID_ZH;
+    delete process.env.DID_MICROSOFT_VOICE_ID;
+    delete process.env.DID_MICROSOFT_VOICE_ID_ZH;
+
+    try {
+      const payload = buildAgentPayload({ characterName: '悠悠', language: 'zh' }, 'https://example.com/yoyo.png');
+
+      expect(payload.greetings).toEqual(['你好，我是 悠悠。想聊天吗？']);
+      expect(payload.llm.instructions).toContain('Always reply in Simplified Chinese');
+      expect(payload.presenter).toMatchObject({
+        voice: { type: 'microsoft', voice_id: 'zh-CN-XiaoxiaoNeural' },
+      });
+    } finally {
+      if (originalVoice === undefined) delete process.env.DID_MICROSOFT_VOICE_ID;
+      else process.env.DID_MICROSOFT_VOICE_ID = originalVoice;
+      if (originalChineseVoice === undefined) delete process.env.DID_MICROSOFT_VOICE_ID_ZH;
+      else process.env.DID_MICROSOFT_VOICE_ID_ZH = originalChineseVoice;
+    }
   });
 
   test('uses expressive presenter only when D-ID llm provider is explicitly configured', () => {
@@ -389,6 +439,36 @@ describe('OpenAI-compatible image request body', () => {
 });
 
 describe('draft storage', () => {
+  test('keeps encrypted secrets readable when screen dimensions change', async () => {
+    const originalWindow = globalThis.window;
+    const originalScreen = globalThis.screen;
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        crypto: globalThis.crypto,
+        location: { origin: 'http://localhost:3000' },
+      },
+    });
+    Object.defineProperty(globalThis, 'screen', {
+      configurable: true,
+      value: { width: 1920, height: 1080 },
+    });
+
+    try {
+      const encrypted = await encryptSecret('sk-proj-secret');
+      Object.defineProperty(globalThis, 'screen', {
+        configurable: true,
+        value: { width: 1440, height: 900 },
+      });
+
+      expect(isCurrentSecretCipher(encrypted)).toBe(true);
+      expect(await decryptSecret(encrypted)).toBe('sk-proj-secret');
+    } finally {
+      Object.defineProperty(globalThis, 'window', { configurable: true, value: originalWindow });
+      Object.defineProperty(globalThis, 'screen', { configurable: true, value: originalScreen });
+    }
+  });
+
   test('persists Shengsuanyun image endpoint and OpenAI-prefixed model names', () => {
     const stored = new Map<string, string>();
     const originalWindow = globalThis.window;

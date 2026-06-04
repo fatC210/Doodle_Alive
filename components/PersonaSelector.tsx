@@ -96,6 +96,7 @@ export function PersonaSelector() {
         imageUrl: draft.generatedImageUrl,
         apiKey: didApiKey,
         allowedDomains: window.location.origin,
+        language,
       });
       await saveCharacter({
         id,

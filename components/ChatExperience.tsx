@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import Script from 'next/script';
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { AlertTriangle, ChevronLeft, Moon, PhoneOff, Sun, Volume2 } from 'lucide-react';
 import { refreshDidAgentClientKey } from '@/lib/did-agent-client';
 import { getDidAgentEmbedConfig } from '@/lib/did-agent-embed';
@@ -17,6 +17,8 @@ import { CharacterAvatar } from './Illustrations';
 type VoiceState = 'idle' | 'loading' | 'ready' | 'error';
 type VoiceIssue = 'none' | 'mic-denied' | 'mic-unavailable' | 'load-failed';
 
+const didClientKeyRefreshes = new Map<string, Promise<DoodleCharacter>>();
+
 export function ChatExperience({ characterId }: { characterId: string }) {
   const { language, t } = useLanguage();
   const { theme, toggleTheme } = useTheme();
@@ -24,17 +26,18 @@ export function ChatExperience({ characterId }: { characterId: string }) {
   const [loaded, setLoaded] = useState(false);
   const [voiceSession, setVoiceSession] = useState<{ characterId: string; state: VoiceState }>({ characterId, state: 'idle' });
   const [voiceIssue, setVoiceIssue] = useState<VoiceIssue>('none');
+  const startingVoiceChatRef = useRef(false);
 
   useEffect(() => {
     async function load() {
       setLoaded(false);
       const stored = await getCharacter(characterId);
-      const refreshedCharacter = stored ? await refreshStoredDidClientKey(stored) : undefined;
+      const refreshedCharacter = stored ? await refreshStoredDidClientKey(stored, language) : undefined;
       setCharacter(refreshedCharacter ?? null);
       setLoaded(true);
     }
     void load();
-  }, [characterId]);
+  }, [characterId, language]);
 
   const display = useMemo(() => character, [character]);
   const displayStyleName = display ? getLocalizedStyleName(display, language) : '';
@@ -46,19 +49,26 @@ export function ChatExperience({ characterId }: { characterId: string }) {
   const voiceStatusClass = getVoiceStatusClass(Boolean(didAgentConfig), voiceState);
   const voiceStatusLabel = getVoiceStatusLabel(Boolean(didAgentConfig), voiceState, t);
   const didAgentTargetId = useMemo(() => `did-agent-container-${normalizeDomId(characterId)}`, [characterId]);
-  const shouldShowDidAgent = Boolean(didAgentConfig) && (voiceState === 'loading' || voiceState === 'ready');
-  const voiceGreetingText = display ? getWelcomeMessages(display.name, language)[0] : '';
+  const isDidAgentActive = Boolean(didAgentConfig) && (voiceState === 'loading' || voiceState === 'ready');
   const updateVoiceState = (state: VoiceState) => setVoiceSession({ characterId, state });
 
   async function handleStartVoiceChat() {
-    setVoiceIssue('none');
-    const microphoneStatus = await requestMicrophonePermission();
-    if (microphoneStatus !== 'granted') {
-      setVoiceIssue(microphoneStatus === 'denied' ? 'mic-denied' : 'mic-unavailable');
-      updateVoiceState('error');
-      return;
+    if (startingVoiceChatRef.current || voiceState === 'loading' || voiceState === 'ready') return;
+
+    startingVoiceChatRef.current = true;
+    try {
+      setVoiceIssue('none');
+      await stopDidAgentSession();
+      const microphoneStatus = await requestMicrophonePermission();
+      if (microphoneStatus !== 'granted') {
+        setVoiceIssue(microphoneStatus === 'denied' ? 'mic-denied' : 'mic-unavailable');
+        updateVoiceState('error');
+        return;
+      }
+      updateVoiceState('loading');
+    } finally {
+      startingVoiceChatRef.current = false;
     }
-    updateVoiceState('loading');
   }
 
   async function handleEndVoiceChat() {
@@ -106,12 +116,12 @@ export function ChatExperience({ characterId }: { characterId: string }) {
           <div className="ready-box"><span className="dot" /><span><b>{display.name} {t('readyToChat')}</b><small>{t('didAgentReady')}</small></span></div>
         </aside>
         <div className="text-chat">
-          {shouldShowDidAgent && didAgentConfig ? (
+          {didAgentConfig ? (
             <DidAgentEmbed
               agentId={didAgentConfig.agentId}
               clientKey={didAgentConfig.clientKey}
               targetId={didAgentTargetId}
-              greetingText={voiceGreetingText}
+              active={isDidAgentActive}
               onReady={() => updateVoiceState('ready')}
               onEnded={() => updateVoiceState('idle')}
               onUnavailable={() => {
@@ -129,7 +139,7 @@ export function ChatExperience({ characterId }: { characterId: string }) {
               <span className={`voice-status-pill ${voiceStatusClass}`} aria-live="polite">
                 <Volume2 size={16} /> {voiceStatusLabel}
               </span>
-              {shouldShowDidAgent ? (
+              {isDidAgentActive ? (
                 <button className="chat-action-button chat-end-button" type="button" onClick={() => { void handleEndVoiceChat(); }} aria-label={t('endChat')}>
                   <PhoneOff size={18} /> {t('endChat')}
                 </button>
@@ -138,42 +148,58 @@ export function ChatExperience({ characterId }: { characterId: string }) {
             </div>
           </header>
           <div className="chat-thread">
-            {shouldShowDidAgent ? (
+            {didAgentConfig ? (
               <div
                 id={didAgentTargetId}
-                className={`did-agent-embed-panel ${voiceState === 'loading' ? 'loading' : ''}`}
+                className={`did-agent-embed-panel ${voiceState === 'loading' ? 'loading' : ''} ${isDidAgentActive ? '' : 'preloading'}`}
                 aria-label={t('startVoiceChat')}
+                aria-hidden={!isDidAgentActive}
+              />
+            ) : null}
+            {!isDidAgentActive ? (
+              <VoiceChatEmptyState
+                characterName={display.name}
+                hasVoiceConfig={Boolean(didAgentConfig)}
+                voiceState={voiceState}
+                voiceIssue={voiceIssue}
+                onStart={handleStartVoiceChat}
               />
             ) : null}
           </div>
-          {!shouldShowDidAgent ? (
-            <div className="input-area did-agent-input-area">
-              {didAgentConfig ? (
-                <DidAgentLauncher
-                  voiceState={voiceState}
-                  voiceIssue={voiceIssue}
-                  onStart={handleStartVoiceChat}
-                />
-              ) : (
-                <MissingDidAgentConfig />
-              )}
-            </div>
-          ) : null}
         </div>
       </section>
     </div>
   );
 }
 
-async function refreshStoredDidClientKey(character: DoodleCharacter) {
+async function refreshStoredDidClientKey(character: DoodleCharacter, language: string) {
   if (!character.didAgentId) return character;
+  if (character.didClientKey) return character;
 
+  const refreshKey = [character.id, character.didAgentId, window.location.origin, language].join(':');
+  const pendingRefresh = didClientKeyRefreshes.get(refreshKey);
+  if (pendingRefresh) return pendingRefresh;
+
+  const refreshPromise = refreshMissingDidClientKey(character, character.didAgentId, language);
+  didClientKeyRefreshes.set(refreshKey, refreshPromise);
+
+  try {
+    return await refreshPromise;
+  } finally {
+    didClientKeyRefreshes.delete(refreshKey);
+  }
+}
+
+async function refreshMissingDidClientKey(character: DoodleCharacter, agentId: string, language: string) {
   try {
     const apiKey = await loadDidApiKey();
     const { clientKey } = await refreshDidAgentClientKey({
-      agentId: character.didAgentId,
+      agentId,
       apiKey,
       allowedDomains: window.location.origin,
+      characterName: character.name,
+      personaPrompt: character.personaPrompt,
+      language,
     });
     if (!clientKey || clientKey === character.didClientKey) return character;
 
@@ -196,7 +222,21 @@ function MissingDidAgentConfig() {
   );
 }
 
-function DidAgentLauncher({ voiceState, voiceIssue, onStart }: { voiceState: VoiceState; voiceIssue: VoiceIssue; onStart: () => void | Promise<void> }) {
+function VoiceChatEmptyState({ characterName, hasVoiceConfig, voiceState, voiceIssue, onStart }: { characterName: string; hasVoiceConfig: boolean; voiceState: VoiceState; voiceIssue: VoiceIssue; onStart: () => void | Promise<void> }) {
+  const { t } = useLanguage();
+
+  return (
+    <section className="voice-empty-state" aria-label={t('startVoiceChat')}>
+      {hasVoiceConfig ? (
+        <DidAgentLauncher characterName={characterName} voiceState={voiceState} voiceIssue={voiceIssue} onStart={onStart} />
+      ) : (
+        <MissingDidAgentConfig />
+      )}
+    </section>
+  );
+}
+
+function DidAgentLauncher({ characterName, voiceState, voiceIssue, onStart }: { characterName: string; voiceState: VoiceState; voiceIssue: VoiceIssue; onStart: () => void | Promise<void> }) {
   const { t } = useLanguage();
 
   if (voiceState === 'ready') {
@@ -209,18 +249,33 @@ function DidAgentLauncher({ voiceState, voiceIssue, onStart }: { voiceState: Voi
 
   return (
     <div className="did-agent-launcher">
+      <div className="voice-welcome-copy">
+        <p className="voice-welcome-eyebrow">{t('voiceWelcomeEyebrow')}</p>
+        <h2><span>{characterName}</span><span className="voice-welcome-wave" aria-hidden="true">👋</span></h2>
+        <p className="subtitle">{t('didAgentWidgetCopy')}</p>
+      </div>
+      <VoiceWelcomeArt />
       {voiceState === 'error' ? (
         <div className="inline-warning did-agent-warning">
           <AlertTriangle size={18} aria-hidden="true" />
           <span>{getVoiceIssueCopy(voiceIssue, t)}</span>
         </div>
-      ) : (
-        <p className="subtitle">{t('didAgentWidgetCopy')}</p>
-      )}
-      <button className="primary-button did-agent-start-button" type="button" onClick={onStart}>
-        <Volume2 size={18} /> {t('startVoiceChat')}
-      </button>
+      ) : null}
+      <div className="voice-action-row">
+        <div className="voice-waveform" aria-hidden="true">
+          {Array.from({ length: 42 }).map((_, index) => <span key={index} />)}
+        </div>
+        <button className="primary-button did-agent-start-button" type="button" onClick={onStart}>
+          <Volume2 size={18} /> {t('startVoiceChat')}
+        </button>
+      </div>
     </div>
+  );
+}
+
+function VoiceWelcomeArt() {
+  return (
+    <div className="voice-welcome-art" aria-hidden="true" />
   );
 }
 
@@ -244,20 +299,6 @@ function getVoiceStatusLabel(hasConfig: boolean, voiceState: VoiceState, t: Retu
   if (voiceState === 'ready') return t('didAgentVoiceReady');
   if (voiceState === 'error') return t('voiceChatUnavailable');
   return t('voiceReady');
-}
-
-function getWelcomeMessages(characterName: string, language: string) {
-  return language === 'zh' ? [
-    `你好，我是 ${characterName}！我已经准备好和你聊天啦。`,
-    `你好！${characterName} 醒来了。想聊聊画画、冒险，还是有趣的故事？`,
-    `欢迎回来！我是 ${characterName}，我可以听你说话、回应你，也会和你一起互动。`,
-    `太好啦，你来了！我是 ${characterName}。我们一起开始一个好玩的故事吧。`,
-  ] : [
-    `Hi, I'm ${characterName}! I'm ready to chat with you.`,
-    `Hello! ${characterName} is awake. Want to talk about drawings, adventures, or something fun?`,
-    `Welcome back! I'm ${characterName}, and I can listen, talk, and react with you.`,
-    `Yay, you're here! I'm ${characterName}. Let's start a fun story together.`,
-  ];
 }
 
 async function requestMicrophonePermission() {
@@ -284,7 +325,6 @@ type DidAgentsWindow = Window & {
     };
     functions?: {
       registerClientTool?: unknown;
-      speak?: (options: { type: 'text' | 'audio'; input: string }) => Promise<unknown> | unknown;
       toggleMicState?: (state?: boolean) => Promise<unknown> | unknown;
       toggleSpeakerState?: (state?: boolean) => Promise<unknown> | unknown;
       interrupt?: () => Promise<unknown> | unknown;
@@ -297,88 +337,127 @@ const DID_AGENT_POLL_INTERVAL_MS = 100;
 const DID_AGENT_POLL_TIMEOUT_MS = 5000;
 const DID_AGENT_CONNECTION_TIMEOUT_MS = 15000;
 
-function DidAgentEmbed({ agentId, clientKey, targetId, greetingText, onReady, onEnded, onUnavailable }: { agentId: string; clientKey: string; targetId: string; greetingText: string; onReady: () => void; onEnded: () => void; onUnavailable: () => void }) {
+async function waitForDidAgentApi() {
+  const deadline = Date.now() + DID_AGENT_POLL_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const api = (window as DidAgentsWindow).DID_AGENTS_API;
+    if (api) return api;
+    await new Promise((resolve) => window.setTimeout(resolve, DID_AGENT_POLL_INTERVAL_MS));
+  }
+  return undefined;
+}
+
+function DidAgentEmbed({ agentId, clientKey, targetId, active, onReady, onEnded, onUnavailable }: { agentId: string; clientKey: string; targetId: string; active: boolean; onReady: () => void; onEnded: () => void; onUnavailable: () => void }) {
   const handledReadyRef = useRef(false);
   const handledConnectionRef = useRef(false);
-  const spokenGreetingRef = useRef(false);
+  const activeRef = useRef(active);
+  const syncRunRef = useRef(0);
   const unsubscribeConnectionRef = useRef<(() => void) | undefined>(undefined);
   const unsubscribeErrorRef = useRef<(() => void) | undefined>(undefined);
   const connectionTimeoutRef = useRef<number | undefined>(undefined);
   const config = getDidAgentEmbedConfig({ agentId, clientKey });
+  const callbacksRef = useRef({ onReady, onEnded, onUnavailable });
+
+  useEffect(() => {
+    callbacksRef.current = { onReady, onEnded, onUnavailable };
+  }, [onReady, onEnded, onUnavailable]);
+
+  const syncDidAgentMode = useCallback(async (shouldConnect: boolean) => {
+    const runId = syncRunRef.current + 1;
+    syncRunRef.current = runId;
+    const api = await waitForDidAgentApi();
+    if (syncRunRef.current !== runId) return;
+
+    if (!api) {
+      console.warn('[D-ID Agent] DID_AGENTS_API was not available after 5s.');
+      callbacksRef.current.onUnavailable();
+      return;
+    }
+
+    unsubscribeConnectionRef.current?.();
+    unsubscribeErrorRef.current?.();
+    if (connectionTimeoutRef.current) window.clearTimeout(connectionTimeoutRef.current);
+    unsubscribeConnectionRef.current = undefined;
+    unsubscribeErrorRef.current = undefined;
+    connectionTimeoutRef.current = undefined;
+    handledConnectionRef.current = false;
+
+    if (!shouldConnect) {
+      api.configure?.({ autoConnect: false, openMode: 'compact', orientation: 'horizontal' });
+      return;
+    }
+
+    const handleConnection = (event: { state?: string }) => {
+      const connectionState = String(event.state || '').toLowerCase();
+      if (['closed', 'completed'].includes(connectionState)) {
+        callbacksRef.current.onEnded();
+        return;
+      }
+
+      if (connectionState !== 'connected') return;
+
+      if (!handledConnectionRef.current) {
+        handledConnectionRef.current = true;
+        if (connectionTimeoutRef.current) window.clearTimeout(connectionTimeoutRef.current);
+        callbacksRef.current.onReady();
+      }
+
+    };
+
+    const connectionUnsubscribe = api.events?.on?.('connection', handleConnection);
+    if (typeof connectionUnsubscribe === 'function') unsubscribeConnectionRef.current = connectionUnsubscribe;
+    const errorUnsubscribe = api.events?.on?.('error', () => {
+      if (!handledConnectionRef.current) callbacksRef.current.onUnavailable();
+    });
+    if (typeof errorUnsubscribe === 'function') unsubscribeErrorRef.current = errorUnsubscribe;
+
+    api.configure?.({
+      autoConnect: true,
+      openMode: 'expanded',
+      orientation: 'horizontal',
+    });
+
+    if (api.events?.on) {
+      connectionTimeoutRef.current = window.setTimeout(() => {
+        if (!handledConnectionRef.current) callbacksRef.current.onUnavailable();
+      }, DID_AGENT_CONNECTION_TIMEOUT_MS);
+    } else {
+      callbacksRef.current.onReady();
+    }
+  }, []);
 
   useEffect(() => {
     handledReadyRef.current = false;
     handledConnectionRef.current = false;
-    spokenGreetingRef.current = false;
     return () => {
       unsubscribeConnectionRef.current?.();
       unsubscribeErrorRef.current?.();
       if (connectionTimeoutRef.current) window.clearTimeout(connectionTimeoutRef.current);
+      syncRunRef.current += 1;
       unsubscribeConnectionRef.current = undefined;
       unsubscribeErrorRef.current = undefined;
       connectionTimeoutRef.current = undefined;
+      void stopDidAgentSession();
     };
   }, [agentId, clientKey, targetId]);
+
+  useEffect(() => {
+    activeRef.current = active;
+    if (handledReadyRef.current) void syncDidAgentMode(active);
+  }, [active, syncDidAgentMode]);
+
+  useEffect(() => {
+    if (!(window as DidAgentsWindow).DID_AGENTS_API) return;
+    handledReadyRef.current = true;
+    void syncDidAgentMode(activeRef.current);
+  }, [agentId, clientKey, targetId, syncDidAgentMode]);
 
   if (!config) return null;
 
   async function handleScriptReady() {
     if (handledReadyRef.current) return;
     handledReadyRef.current = true;
-    const deadline = Date.now() + DID_AGENT_POLL_TIMEOUT_MS;
-    while (Date.now() < deadline) {
-      const api = (window as DidAgentsWindow).DID_AGENTS_API;
-      if (api) {
-        const handleConnection = (event: { state?: string }) => {
-          const connectionState = String(event.state || '').toLowerCase();
-          if (['closed', 'completed'].includes(connectionState)) {
-            onEnded();
-            return;
-          }
-
-          if (connectionState !== 'connected') return;
-
-          if (!handledConnectionRef.current) {
-            handledConnectionRef.current = true;
-            if (connectionTimeoutRef.current) window.clearTimeout(connectionTimeoutRef.current);
-            onReady();
-          }
-
-          if (!spokenGreetingRef.current && greetingText.trim() && api.functions?.speak) {
-            spokenGreetingRef.current = true;
-            void Promise.resolve(api.functions.speak({
-              type: 'text',
-              input: greetingText,
-            })).catch((error) => {
-              console.warn('[D-ID Agent] failed to speak welcome message', error);
-            });
-          }
-        };
-
-        const connectionUnsubscribe = api.events?.on?.('connection', handleConnection);
-        if (typeof connectionUnsubscribe === 'function') unsubscribeConnectionRef.current = connectionUnsubscribe;
-        const errorUnsubscribe = api.events?.on?.('error', () => {
-          if (!handledConnectionRef.current) onUnavailable();
-        });
-        if (typeof errorUnsubscribe === 'function') unsubscribeErrorRef.current = errorUnsubscribe;
-        api.configure?.({
-          autoConnect: true,
-          openMode: 'expanded',
-          orientation: 'horizontal',
-        });
-        if (api.events?.on) {
-          connectionTimeoutRef.current = window.setTimeout(() => {
-            if (!handledConnectionRef.current) onUnavailable();
-          }, DID_AGENT_CONNECTION_TIMEOUT_MS);
-        } else {
-          onReady();
-        }
-        return;
-      }
-      await new Promise((resolve) => window.setTimeout(resolve, DID_AGENT_POLL_INTERVAL_MS));
-    }
-    console.warn('[D-ID Agent] DID_AGENTS_API was not available after 5s.');
-    onUnavailable();
+    await syncDidAgentMode(activeRef.current);
   }
 
   return (
@@ -391,8 +470,8 @@ function DidAgentEmbed({ agentId, clientKey, targetId, greetingText, onReady, on
       data-mode="full"
       data-target-id={targetId}
       data-orientation="horizontal"
-      data-open-mode="expanded"
-      data-auto-connect="true"
+      data-open-mode={active ? 'expanded' : 'compact'}
+      data-auto-connect={active ? 'true' : 'false'}
       data-client-key={config.clientKey}
       data-agent-id={config.agentId}
       onLoad={() => { void handleScriptReady(); }}
@@ -413,7 +492,7 @@ async function stopDidAgentSession() {
     () => functions?.interrupt?.(),
     () => functions?.toggleMicState?.(true),
     () => functions?.toggleSpeakerState?.(true),
-    () => functions?.requestFullscreen?.(false),
+    () => document.fullscreenElement ? document.exitFullscreen() : undefined,
     () => api?.configure?.({ autoConnect: false, openMode: 'compact' }),
   ];
 

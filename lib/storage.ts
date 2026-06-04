@@ -14,6 +14,7 @@ const FALLBACK_PREFIX = 'doodle-fallback-store:';
 const LEGACY_STARTER_CHARACTER_IDS = ['lumi', 'rex', 'nova', 'bamboo', 'milo', 'zara'];
 const LEGACY_PLACEHOLDER_ENDPOINT_HOSTS = ['api.your-llm-provider.com', 'api.your-image-provider.com'];
 const LEGACY_PLACEHOLDER_IMAGE_MODELS: string[] = [];
+const SECRET_VERSION = 'v2';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 const memoryStorage = new Map<string, string>();
@@ -97,23 +98,36 @@ export function resetSettings() {
 
 export async function encryptSecret(value: string) {
   if (!value) return '';
-  const cryptoKey = await deriveStorageKey();
+  const cryptoKey = await deriveStableStorageKey();
   const iv = window.crypto.getRandomValues(new Uint8Array(12));
   const encoded = new TextEncoder().encode(value);
   const cipher = await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv }, cryptoKey, encoded);
-  return `${toBase64(iv)}.${toBase64(new Uint8Array(cipher))}`;
+  return `${SECRET_VERSION}.${toBase64(iv)}.${toBase64(new Uint8Array(cipher))}`;
 }
 
 export async function decryptSecret(value: string) {
   if (!value || !value.includes('.')) return '';
+  const parts = value.split('.');
+  if (parts[0] === SECRET_VERSION && parts.length === 3) {
+    return decryptSecretWithKey(parts[1], parts[2], await deriveStableStorageKey());
+  }
+
+  if (parts.length !== 2) return '';
+  return await decryptSecretWithKey(parts[0], parts[1], await deriveLegacyStorageKey())
+    || await decryptSecretWithKey(parts[0], parts[1], await deriveStableStorageKey());
+}
+
+async function decryptSecretWithKey(ivText: string, cipherText: string, cryptoKey: CryptoKey) {
   try {
-    const [ivText, cipherText] = value.split('.');
-    const cryptoKey = await deriveStorageKey();
     const plain = await window.crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromBase64(ivText) }, cryptoKey, fromBase64(cipherText));
     return new TextDecoder().decode(plain);
   } catch {
     return '';
   }
+}
+
+export function isCurrentSecretCipher(value: string) {
+  return value.startsWith(`${SECRET_VERSION}.`);
 }
 
 export async function blobToDataUrl(blob: Blob) {
@@ -303,11 +317,27 @@ function requestToPromise<T>(request: IDBRequest<T>) {
   });
 }
 
-async function deriveStorageKey() {
-  const fingerprint = [navigator.userAgent, navigator.language, screen.width, screen.height].join('|');
-  const keyMaterial = await window.crypto.subtle.importKey('raw', new TextEncoder().encode(fingerprint), 'PBKDF2', false, ['deriveKey']);
+async function deriveStableStorageKey() {
+  const origin = window.location?.origin || 'doodle-alive-local';
+  return deriveStorageKey(`doodle-alive|${origin}|${SECRET_VERSION}`, 'doodle-alive-local-v2');
+}
+
+async function deriveLegacyStorageKey() {
+  const appNavigator = typeof navigator !== 'undefined' ? navigator : window.navigator;
+  const appScreen = typeof screen !== 'undefined' ? screen : window.screen;
+  const fingerprint = [
+    appNavigator?.userAgent ?? '',
+    appNavigator?.language ?? '',
+    appScreen?.width ?? 0,
+    appScreen?.height ?? 0,
+  ].join('|');
+  return deriveStorageKey(fingerprint, 'doodle-alive-local');
+}
+
+async function deriveStorageKey(seed: string, salt: string) {
+  const keyMaterial = await window.crypto.subtle.importKey('raw', new TextEncoder().encode(seed), 'PBKDF2', false, ['deriveKey']);
   return window.crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt: new TextEncoder().encode('doodle-alive-local'), iterations: 100000, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt: new TextEncoder().encode(salt), iterations: 100000, hash: 'SHA-256' },
     keyMaterial,
     { name: 'AES-GCM', length: 256 },
     false,

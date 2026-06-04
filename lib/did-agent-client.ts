@@ -9,6 +9,7 @@ export type DidAgentProvisionRequest = {
   agentId?: string;
   apiKey?: string;
   allowedDomains?: string;
+  language?: string;
 };
 
 export type DidAgentProvisionResponse = {
@@ -22,6 +23,10 @@ export type DidAgentClientKeyRequest = {
   agentId: string;
   apiKey?: string;
   allowedDomains?: string;
+  characterName?: string;
+  personaPrompt?: string;
+  sourceUrl?: string;
+  language?: string;
 };
 
 export type DidAgentClientKeyResponse = {
