@@ -120,6 +120,7 @@ export function PersonaSelector() {
         didAgentId: didAgent.agentId,
         didClientKey: didAgent.clientKey,
         didSourceUrl: didAgent.sourceUrl,
+        didPosterUrl: didAgent.posterUrl,
         didStatus: didAgent.status,
       });
       clearDraft();

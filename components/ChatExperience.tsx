@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Script from 'next/script';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { AlertTriangle, ChevronLeft, Moon, PhoneOff, Sun, Volume2 } from 'lucide-react';
-import { refreshDidAgentClientKey } from '@/lib/did-agent-client';
+import { provisionDidAgent, refreshDidAgentClientKey } from '@/lib/did-agent-client';
 import { getDidAgentEmbedConfig } from '@/lib/did-agent-embed';
 import { getLocalizedPersonaName, getLocalizedStyleName } from '@/lib/display-names';
 import { useLanguage } from '@/lib/i18n';
@@ -18,6 +18,7 @@ type VoiceState = 'idle' | 'loading' | 'ready' | 'error';
 type VoiceIssue = 'none' | 'mic-denied' | 'mic-unavailable' | 'load-failed';
 
 const didClientKeyRefreshes = new Map<string, Promise<DoodleCharacter>>();
+const didAgentPosterRepairs = new Map<string, Promise<DoodleCharacter>>();
 
 export function ChatExperience({ characterId }: { characterId: string }) {
   const { language, t } = useLanguage();
@@ -32,7 +33,7 @@ export function ChatExperience({ characterId }: { characterId: string }) {
     async function load() {
       setLoaded(false);
       const stored = await getCharacter(characterId);
-      const refreshedCharacter = stored ? await refreshStoredDidClientKey(stored, language) : undefined;
+      const refreshedCharacter = stored ? await refreshStoredDidAgentConfig(stored, language) : undefined;
       setCharacter(refreshedCharacter ?? null);
       setLoaded(true);
     }
@@ -172,6 +173,11 @@ export function ChatExperience({ characterId }: { characterId: string }) {
   );
 }
 
+async function refreshStoredDidAgentConfig(character: DoodleCharacter, language: string) {
+  const withClientKey = await refreshStoredDidClientKey(character, language);
+  return await repairStoredDidAgentPoster(withClientKey, language);
+}
+
 async function refreshStoredDidClientKey(character: DoodleCharacter, language: string) {
   if (!character.didAgentId) return character;
   if (character.didClientKey) return character;
@@ -208,6 +214,58 @@ async function refreshMissingDidClientKey(character: DoodleCharacter, agentId: s
     return updatedCharacter;
   } catch (error) {
     console.warn('[D-ID Agent] failed to refresh client key', error);
+    return character;
+  }
+}
+
+async function repairStoredDidAgentPoster(character: DoodleCharacter, language: string) {
+  if (!needsDidAgentPosterRepair(character)) return character;
+
+  const repairKey = [character.id, character.didAgentId, window.location.origin, language, 'poster'].join(':');
+  const pendingRepair = didAgentPosterRepairs.get(repairKey);
+  if (pendingRepair) return pendingRepair;
+
+  const repairPromise = patchDidAgentPoster(character, language).finally(() => {
+    didAgentPosterRepairs.delete(repairKey);
+  });
+  didAgentPosterRepairs.set(repairKey, repairPromise);
+  return repairPromise;
+}
+
+function needsDidAgentPosterRepair(character: DoodleCharacter) {
+  if (!character.didAgentId || character.didPosterUrl) return false;
+  if (!character.didSourceUrl?.startsWith('s3://')) return false;
+  return Boolean(character.generatedDataUrl?.startsWith('data:image/') || isHttpUrl(character.generatedImageUrl));
+}
+
+async function patchDidAgentPoster(character: DoodleCharacter, language: string) {
+  try {
+    const apiKey = await loadDidApiKey();
+    const didAgent = await provisionDidAgent({
+      characterId: character.id,
+      characterName: character.name,
+      personaPrompt: character.personaPrompt,
+      imageDataUrl: character.generatedDataUrl?.startsWith('data:image/') ? character.generatedDataUrl : undefined,
+      imageUrl: isHttpUrl(character.generatedImageUrl) ? character.generatedImageUrl : undefined,
+      agentId: character.didAgentId,
+      apiKey,
+      allowedDomains: window.location.origin,
+      language,
+    });
+
+    const updatedCharacter = {
+      ...character,
+      didAgentId: didAgent.agentId,
+      didClientKey: didAgent.clientKey,
+      didSourceUrl: didAgent.sourceUrl,
+      didPosterUrl: didAgent.posterUrl,
+      didStatus: didAgent.status,
+      updatedAt: new Date().toISOString(),
+    };
+    await saveCharacter(updatedCharacter);
+    return updatedCharacter;
+  } catch (error) {
+    console.warn('[D-ID Agent] failed to repair presenter poster', error);
     return character;
   }
 }
@@ -541,6 +599,16 @@ function normalizeThemeName(value: string) {
 
 function normalizeDomId(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-|-$/g, '') || 'agent';
+}
+
+function isHttpUrl(url: string | undefined) {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 function colorWithAlpha(hex: string, alpha: number) {

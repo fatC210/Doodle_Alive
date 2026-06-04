@@ -16,6 +16,7 @@ export type DidAgentProvisionResponse = {
   agentId: string;
   clientKey: string;
   sourceUrl: string;
+  posterUrl: string;
   status?: string;
 };
 

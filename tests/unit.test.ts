@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { generateRandomCharacterName } from '../lib/character-name';
 import { getMorphingConfigIssues } from '../lib/config-requirements';
 import { defaultSettings, personas, pickRandomPersona, styles } from '../lib/data';
-import { buildAgentClientKeyPath, buildAgentPayload, refreshDidAgentClientKey } from '../lib/did-agent-server';
+import { buildAgentClientKeyPath, buildAgentPayload, readDidImageUploadUrl, refreshDidAgentClientKey } from '../lib/did-agent-server';
 import { canMove, getCreationResumePath, nextStep, previousStep } from '../lib/flow';
 import { buildCustomImageRequestBody, normalizeCustomImageEndpoint } from '../lib/image-gen';
 import { buildChatCompletionsImageRequestBody, buildCustomImageEditEndpoint, buildCustomImageEditJsonRequestBody, buildResponsesImageRequestBody, extractImageDataUrl, extractImageUrl, usesJsonImageEditPayload } from '../lib/image-provider';
@@ -100,6 +100,22 @@ describe('D-ID agent payload', () => {
       thumbnail: 'https://example.com/milo.png',
     });
     expect(payload.llm).toMatchObject({ provider: 'openai', model: 'gpt-4.1-mini' });
+  });
+
+  test('uses a browser-loadable poster when D-ID stores the source image internally', () => {
+    const dataUrl = 'data:image/png;base64,avatar';
+    const payload = buildAgentPayload({ characterName: 'Milo', imageDataUrl: dataUrl }, 's3://d-id-images-prod/user/avatar.png', dataUrl);
+
+    expect(payload.presenter).toMatchObject({
+      type: 'talk',
+      source_url: 's3://d-id-images-prod/user/avatar.png',
+      thumbnail: dataUrl,
+    });
+  });
+
+  test('prefers public HTTP image upload URLs over internal S3 URLs', () => {
+    expect(readDidImageUploadUrl({ url: 's3://d-id-images-prod/internal.png', download_url: 'https://cdn.example.com/avatar.png' })).toBe('https://cdn.example.com/avatar.png');
+    expect(readDidImageUploadUrl({ url: 's3://d-id-images-prod/internal.png' })).toBe('s3://d-id-images-prod/internal.png');
   });
 
   test('localizes D-ID greeting, instructions, and default voice from UI language', () => {
