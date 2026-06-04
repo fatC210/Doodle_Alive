@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import Script from 'next/script';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { AlertTriangle, ChevronLeft, Moon, PhoneOff, Sun, Volume2 } from 'lucide-react';
 import { provisionDidAgent, refreshDidAgentClientKey } from '@/lib/did-agent-client';
@@ -55,13 +54,19 @@ export function ChatExperience({ characterId }: { characterId: string }) {
   const isDidAgentActive = Boolean(didAgentConfig) && (voiceState === 'loading' || voiceState === 'ready');
   const updateVoiceState = (state: VoiceState) => setVoiceSession({ characterId, state });
 
+  useEffect(() => {
+    return () => {
+      void resetDidAgentRuntime();
+    };
+  }, [characterId]);
+
   async function handleStartVoiceChat() {
     if (startingVoiceChatRef.current || voiceState === 'loading' || voiceState === 'ready') return;
 
     startingVoiceChatRef.current = true;
     try {
       setVoiceIssue('none');
-      await stopDidAgentSession();
+      await resetDidAgentRuntime();
       const microphoneStatus = await requestMicrophonePermission();
       if (microphoneStatus !== 'granted') {
         setVoiceIssue(microphoneStatus === 'denied' ? 'mic-denied' : 'mic-unavailable');
@@ -77,7 +82,7 @@ export function ChatExperience({ characterId }: { characterId: string }) {
   async function handleEndVoiceChat() {
     setVoiceIssue('none');
     try {
-      await stopDidAgentSession();
+      await resetDidAgentRuntime();
     } finally {
       updateVoiceState('idle');
     }
@@ -429,10 +434,11 @@ function DidAgentEmbed({ agentId, clientKey, targetId, active, onReady, onEnded,
   const handledConnectionRef = useRef(false);
   const activeRef = useRef(active);
   const syncRunRef = useRef(0);
+  const scriptRef = useRef<HTMLScriptElement | undefined>(undefined);
   const unsubscribeConnectionRef = useRef<(() => void) | undefined>(undefined);
   const unsubscribeErrorRef = useRef<(() => void) | undefined>(undefined);
   const connectionTimeoutRef = useRef<number | undefined>(undefined);
-  const config = getDidAgentEmbedConfig({ agentId, clientKey });
+  const config = useMemo(() => getDidAgentEmbedConfig({ agentId, clientKey }), [agentId, clientKey]);
   const callbacksRef = useRef({ onReady, onEnded, onUnavailable });
 
   useEffect(() => {
@@ -503,6 +509,12 @@ function DidAgentEmbed({ agentId, clientKey, targetId, active, onReady, onEnded,
     }
   }, []);
 
+  const handleScriptReady = useCallback(async () => {
+    if (handledReadyRef.current) return;
+    handledReadyRef.current = true;
+    await syncDidAgentMode(activeRef.current);
+  }, [syncDidAgentMode]);
+
   useEffect(() => {
     handledReadyRef.current = false;
     handledConnectionRef.current = false;
@@ -514,7 +526,8 @@ function DidAgentEmbed({ agentId, clientKey, targetId, active, onReady, onEnded,
       unsubscribeConnectionRef.current = undefined;
       unsubscribeErrorRef.current = undefined;
       connectionTimeoutRef.current = undefined;
-      void stopDidAgentSession();
+      void resetDidAgentRuntime(scriptRef.current);
+      scriptRef.current = undefined;
     };
   }, [agentId, clientKey, targetId]);
 
@@ -524,41 +537,46 @@ function DidAgentEmbed({ agentId, clientKey, targetId, active, onReady, onEnded,
   }, [active, syncDidAgentMode]);
 
   useEffect(() => {
-    if (!(window as DidAgentsWindow).DID_AGENTS_API) return;
-    handledReadyRef.current = true;
-    void syncDidAgentMode(activeRef.current);
-  }, [agentId, clientKey, targetId, syncDidAgentMode]);
+    if (!config) return;
+    let cancelled = false;
+    const script = document.createElement('script');
+    script.type = 'module';
+    script.crossOrigin = 'anonymous';
+    script.dataset.name = 'did-agent';
+    script.dataset.mode = 'full';
+    script.dataset.targetId = targetId;
+    script.dataset.orientation = 'horizontal';
+    script.dataset.openMode = activeRef.current ? 'expanded' : 'compact';
+    script.dataset.autoConnect = activeRef.current ? 'true' : 'false';
+    script.dataset.clientKey = config.clientKey;
+    script.dataset.agentId = config.agentId;
+    script.src = `${config.src}${config.src.includes('?') ? '&' : '?'}session=${encodeURIComponent(`${targetId}-${Date.now()}`)}`;
+    script.onload = () => {
+      if (cancelled) {
+        void resetDidAgentRuntime(script);
+        return;
+      }
+      void handleScriptReady();
+    };
+    script.onerror = (error) => {
+      if (cancelled) return;
+      console.warn('[D-ID Agent] embed script failed to load', error);
+      callbacksRef.current.onUnavailable();
+    };
 
-  if (!config) return null;
+    void resetDidAgentRuntime().then(() => {
+      if (cancelled) return;
+      scriptRef.current = script;
+      document.body.appendChild(script);
+    });
 
-  async function handleScriptReady() {
-    if (handledReadyRef.current) return;
-    handledReadyRef.current = true;
-    await syncDidAgentMode(activeRef.current);
-  }
+    return () => {
+      cancelled = true;
+      if (script.parentElement) script.remove();
+    };
+  }, [config, handleScriptReady, targetId]);
 
-  return (
-    <Script
-      src={config.src}
-      strategy="afterInteractive"
-      type="module"
-      crossOrigin="anonymous"
-      data-name="did-agent"
-      data-mode="full"
-      data-target-id={targetId}
-      data-orientation="horizontal"
-      data-open-mode={active ? 'expanded' : 'compact'}
-      data-auto-connect={active ? 'true' : 'false'}
-      data-client-key={config.clientKey}
-      data-agent-id={config.agentId}
-      onLoad={() => { void handleScriptReady(); }}
-      onReady={() => { void handleScriptReady(); }}
-      onError={(error) => {
-        console.warn('[D-ID Agent] embed script failed to load', error);
-        onUnavailable();
-      }}
-    />
-  );
+  return null;
 }
 
 async function stopDidAgentSession() {
@@ -580,6 +598,13 @@ async function stopDidAgentSession() {
       console.warn('[D-ID Agent] failed while ending voice chat', error);
     }
   }
+}
+
+async function resetDidAgentRuntime(script?: HTMLScriptElement) {
+  await stopDidAgentSession();
+  script?.remove();
+  document.querySelectorAll<HTMLScriptElement>('script[data-name="did-agent"]').forEach((didScript) => didScript.remove());
+  delete (window as DidAgentsWindow).DID_AGENTS_API;
 }
 
 function getCharacterChatTheme(character: DoodleCharacter): CSSProperties {
