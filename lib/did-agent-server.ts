@@ -41,7 +41,7 @@ export type DidAgentProvisionResult = {
 
 export async function provisionDidAgent(payload: DidRequestBody): Promise<DidAgentProvisionResult> {
   const apiKey = getDidApiKey(payload);
-  const sourceUrl = await uploadImage(payload, apiKey);
+  const sourceUrl = await uploadImage(payload);
   const posterUrl = resolvePresenterPosterUrl(payload, sourceUrl);
   const agentPayload = buildAgentPayload(payload, sourceUrl, posterUrl);
   const agent = payload.agentId
@@ -79,7 +79,7 @@ export function didErrorResponse(error: unknown) {
   return NextResponse.json({ error: message }, { status: 502 });
 }
 
-async function uploadImage(payload: DidRequestBody, apiKey: string) {
+async function uploadImage(payload: DidRequestBody) {
   const publicImageUrl = await resolvePublicImageUrl({
     characterId: payload.characterId,
     imageDataUrl: payload.imageDataUrl,
@@ -87,26 +87,8 @@ async function uploadImage(payload: DidRequestBody, apiKey: string) {
   });
   if (publicImageUrl) return publicImageUrl;
 
-  if (payload.imageDataUrl) return uploadImageDataUrl(payload.imageDataUrl, apiKey, payload.characterId);
   if (payload.imageUrl) throw new Error('D-ID avatar image URL must be an HTTP(S) URL.');
   throw new Error('Missing generated image for D-ID avatar.');
-}
-
-async function uploadImageDataUrl(imageDataUrl: string, apiKey: string, characterId: string | undefined) {
-  const match = imageDataUrl.match(/^data:(image\/(?:png|jpeg));base64,(.+)$/);
-  if (!match) throw new Error('D-ID only supports PNG or JPEG data URLs for avatar upload.');
-
-  const [, contentType, base64] = match;
-  const extension = contentType === 'image/jpeg' ? 'jpg' : 'png';
-  const filename = safeFilename(`${characterId || 'character'}.${extension}`);
-  const bytes = Uint8Array.from(Buffer.from(base64, 'base64'));
-  const formData = new FormData();
-  formData.append('image', new Blob([bytes], { type: contentType }), filename);
-
-  const result = await didFetchJson('/images', apiKey, { method: 'POST', body: formData });
-  const url = readDidImageUploadUrl(result);
-  if (!url) throw new Error('D-ID image upload did not return a browser-loadable HTTP(S) URL. Configure Vercel Blob storage or use an image provider that returns a public HTTPS image URL, then recreate the character.');
-  return url;
 }
 
 export function buildAgentPayload(payload: DidRequestBody, sourceUrl: string, posterUrl = sourceUrl) {
@@ -299,10 +281,6 @@ function getDidApiKey(payload: DidRequestBody) {
 
 function normalizeAuthorization(apiKey: string) {
   return apiKey.toLowerCase().startsWith('basic ') ? apiKey : `Basic ${apiKey}`;
-}
-
-function safeFilename(filename: string) {
-  return filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 50) || 'character.png';
 }
 
 function buildLanguageInstruction(language: DidAgentLanguage) {

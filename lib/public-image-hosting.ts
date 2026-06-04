@@ -16,13 +16,16 @@ type ParsedDataUrl = {
 export async function resolvePublicImageUrl(input: PublicImageInput) {
   const publicImageUrl = normalizeHttpUrl(input.imageUrl);
   if (!input.imageDataUrl?.startsWith('data:image/')) return publicImageUrl;
-  if (!isBlobUploadConfigured()) return publicImageUrl;
+  if (!isBlobUploadConfigured()) {
+    if (publicImageUrl) return publicImageUrl;
+    throw new Error('Vercel Blob storage is not configured. Connect a Vercel Blob store and redeploy so generated data URL images can become public HTTPS URLs for D-ID.');
+  }
 
   try {
     return await uploadDataUrlToBlob(input.imageDataUrl, input.characterId);
   } catch (error) {
-    if (publicImageUrl) return publicImageUrl;
     const message = error instanceof Error ? error.message : 'Unknown Vercel Blob upload error.';
+    if (publicImageUrl) return publicImageUrl;
     throw new Error(`Public image hosting failed: ${message}`);
   }
 }

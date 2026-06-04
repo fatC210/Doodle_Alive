@@ -145,7 +145,7 @@ describe('D-ID agent payload', () => {
     }
   });
 
-  test('falls back to an existing public URL when Blob hosting is not configured', async () => {
+  test('requires Blob hosting for generated data URLs without public image URLs', async () => {
     const originalToken = process.env.BLOB_READ_WRITE_TOKEN;
     const originalStoreId = process.env.BLOB_STORE_ID;
     delete process.env.BLOB_READ_WRITE_TOKEN;
@@ -157,7 +157,7 @@ describe('D-ID agent payload', () => {
         imageDataUrl: 'data:image/png;base64,avatar',
         imageUrl: 'https://cdn.example.com/avatar.png',
       })).resolves.toBe('https://cdn.example.com/avatar.png');
-      await expect(resolvePublicImageUrl({ imageDataUrl: 'data:image/png;base64,avatar' })).resolves.toBe('');
+      await expect(resolvePublicImageUrl({ imageDataUrl: 'data:image/png;base64,avatar' })).rejects.toThrow('Vercel Blob storage is not configured');
     } finally {
       if (originalToken === undefined) delete process.env.BLOB_READ_WRITE_TOKEN;
       else process.env.BLOB_READ_WRITE_TOKEN = originalToken;
