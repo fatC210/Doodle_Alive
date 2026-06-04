@@ -52,6 +52,7 @@ export interface DoodleCharacter {
   tone?: string;
   didAgentId?: string;
   didClientKey?: string;
+  didClientKeyOrigin?: string;
   didSourceUrl?: string;
   didPosterUrl?: string;
   didStatus?: string;

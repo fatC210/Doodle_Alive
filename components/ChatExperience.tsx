@@ -119,7 +119,7 @@ export function ChatExperience({ characterId }: { characterId: string }) {
           <div className="ready-box"><span className="dot" /><span><b>{display.name} {t('readyToChat')}</b><small>{t('didAgentReady')}</small></span></div>
         </aside>
         <div className="text-chat">
-          {didAgentConfig ? (
+          {didAgentConfig && isDidAgentActive ? (
             <DidAgentEmbed
               agentId={didAgentConfig.agentId}
               clientKey={didAgentConfig.clientKey}
@@ -151,7 +151,7 @@ export function ChatExperience({ characterId }: { characterId: string }) {
             </div>
           </header>
           <div className="chat-thread">
-            {didAgentConfig ? (
+            {didAgentConfig && isDidAgentActive ? (
               <div
                 id={didAgentTargetId}
                 className={`did-agent-embed-panel ${voiceState === 'loading' ? 'loading' : ''} ${isDidAgentActive ? '' : 'preloading'}`}
@@ -182,9 +182,10 @@ async function refreshStoredDidAgentConfig(character: DoodleCharacter, language:
 
 async function refreshStoredDidClientKey(character: DoodleCharacter, language: string) {
   if (!character.didAgentId) return character;
-  if (character.didClientKey) return character;
+  const currentOrigin = window.location.origin;
+  if (character.didClientKey && character.didClientKeyOrigin === currentOrigin) return character;
 
-  const refreshKey = [character.id, character.didAgentId, window.location.origin, language].join(':');
+  const refreshKey = [character.id, character.didAgentId, currentOrigin, language].join(':');
   const pendingRefresh = didClientKeyRefreshes.get(refreshKey);
   if (pendingRefresh) return pendingRefresh;
 
@@ -200,18 +201,24 @@ async function refreshStoredDidClientKey(character: DoodleCharacter, language: s
 
 async function refreshMissingDidClientKey(character: DoodleCharacter, agentId: string, language: string) {
   try {
+    const currentOrigin = window.location.origin;
     const apiKey = await loadDidApiKey();
     const { clientKey } = await refreshDidAgentClientKey({
       agentId,
       apiKey,
-      allowedDomains: window.location.origin,
+      allowedDomains: currentOrigin,
       characterName: character.name,
       personaPrompt: character.personaPrompt,
       language,
     });
-    if (!clientKey || clientKey === character.didClientKey) return character;
+    if (!clientKey) return character;
 
-    const updatedCharacter = { ...character, didClientKey: clientKey, updatedAt: new Date().toISOString() };
+    const updatedCharacter = {
+      ...character,
+      didClientKey: clientKey,
+      didClientKeyOrigin: currentOrigin,
+      updatedAt: new Date().toISOString(),
+    };
     await saveCharacter(updatedCharacter);
     return updatedCharacter;
   } catch (error) {
@@ -268,6 +275,7 @@ async function patchDidAgentPoster(character: DoodleCharacter, language: string)
       ...character,
       didAgentId: didAgent.agentId,
       didClientKey: didAgent.clientKey,
+      didClientKeyOrigin: window.location.origin,
       didSourceUrl: didAgent.sourceUrl,
       didPosterUrl: didAgent.posterUrl,
       didStatus: didAgent.status,

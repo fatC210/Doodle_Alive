@@ -119,6 +119,7 @@ export function PersonaSelector() {
         tone: selectedStyle.tone,
         didAgentId: didAgent.agentId,
         didClientKey: didAgent.clientKey,
+        didClientKeyOrigin: window.location.origin,
         didSourceUrl: didAgent.sourceUrl,
         didPosterUrl: didAgent.posterUrl,
         didStatus: didAgent.status,
